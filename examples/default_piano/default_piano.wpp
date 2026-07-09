@@ -1,0 +1,18 @@
+{
+  "__wpp_version": 1,
+  "metadata": {
+    "name": "default_piano",
+    "version": "1.0.0",
+    "author": "FmiL",
+    "copyright": "",
+    "category": "",
+    "tags": [],
+    "description": "",
+    "notes": "",
+    "sample_rate": 44100,
+    "created_at": "2026-07-09T09:13:06.234372+00:00",
+    "updated_at": "2026-07-09T09:13:41.574988+00:00"
+  },
+  "samples": [],
+  "zones": []
+}

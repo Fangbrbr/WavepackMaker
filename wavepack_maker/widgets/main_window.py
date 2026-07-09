@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QSplitter,
+    QStyle,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -45,6 +47,7 @@ class MainWindow(QMainWindow):
         self._ignore_dirty_once = True  # 首次新建工程不弹保存询问
 
         self._setup_menu()
+        self._setup_toolbar()
         self._setup_central()
         self._setup_statusbar()
         self._new_project()
@@ -98,6 +101,48 @@ class MainWindow(QMainWindow):
         self._about_action = QAction("关于(&A)", self)
         self._about_action.triggered.connect(self._show_about)
         help_menu.addAction(self._about_action)
+
+    def _setup_toolbar(self) -> None:
+        """顶部工具栏：左侧放常用工程操作，右侧放导出。"""
+        toolbar = QToolBar("主工具栏", self)
+        toolbar.setMovable(False)
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.addToolBar(toolbar)
+
+        # 左侧：新建工程
+        new_btn = QAction(
+            self.style().standardIcon(QStyle.SP_FileIcon), "新建工程", self
+        )
+        new_btn.setShortcut(QKeySequence.StandardKey.New)
+        new_btn.triggered.connect(self._new_project)
+        toolbar.addAction(new_btn)
+
+        # 左侧：保存工程
+        save_btn = QAction(
+            self.style().standardIcon(QStyle.SP_DialogSaveButton), "保存工程", self
+        )
+        save_btn.setShortcut(QKeySequence.StandardKey.Save)
+        save_btn.triggered.connect(self._save_project)
+        toolbar.addAction(save_btn)
+
+        # 左侧：工程属性
+        props_btn = QAction(
+            self.style().standardIcon(QStyle.SP_FileDialogInfoView), "工程属性", self
+        )
+        props_btn.triggered.connect(lambda: self._edit_properties("工程属性"))
+        toolbar.addAction(props_btn)
+
+        # 右侧：导出 wavepack（通过 stretch widget 靠右）
+        export_btn = QAction(
+            self.style().standardIcon(QStyle.SP_ArrowForward), "导出 .wavepack", self
+        )
+        export_btn.triggered.connect(self._export_wavepack)
+        spacer = QWidget()
+        spacer.setSizePolicy(
+            self.sizePolicy().Expanding, self.sizePolicy().Preferred
+        )
+        toolbar.addWidget(spacer)
+        toolbar.addAction(export_btn)
 
     def _setup_central(self) -> None:
         central = QWidget()
