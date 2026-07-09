@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QSplitter,
     QStyle,
     QToolBar,
@@ -138,9 +139,7 @@ class MainWindow(QMainWindow):
         )
         export_btn.triggered.connect(self._export_wavepack)
         spacer = QWidget()
-        spacer.setSizePolicy(
-            self.sizePolicy().Expanding, self.sizePolicy().Preferred
-        )
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
         toolbar.addAction(export_btn)
 
