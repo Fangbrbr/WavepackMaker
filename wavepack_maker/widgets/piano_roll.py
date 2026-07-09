@@ -20,9 +20,15 @@ class PianoRoll(QWidget):
         self._ranges: List[Tuple[int, int]] = []  # (min_note, max_note)
         self._root_notes: List[int] = []
         self._hover_note: Optional[int] = None
+        self._accent: QColor = QColor(0, 150, 255)
         self.setMinimumHeight(40)
         self.setMaximumHeight(90)
         self.setFont(QFont("Microsoft YaHei", 8))
+
+    def set_theme(self, theme) -> None:
+        """应用主题色。"""
+        self._accent = theme.accent
+        self.update()
 
     def set_highlight(self, ranges: List[Tuple[int, int]], root_notes: List[int]) -> None:
         """设置要高亮的 note 范围与根音位置。"""
@@ -60,13 +66,13 @@ class PianoRoll(QWidget):
         for min_n, max_n in self._ranges:
             for n in range(max(0, min_n), min(128, max_n + 1)):
                 rect = self._note_rect(n)
-                painter.fillRect(rect, QColor(100, 200, 100, 120))
+                painter.fillRect(rect, QColor(self._accent.red(), self._accent.green(), self._accent.blue(), 120))
 
         # 根音标记
         for root in self._root_notes:
             if 0 <= root < 128:
                 rect = self._note_rect(root)
-                painter.fillRect(rect, QColor(255, 80, 80, 180))
+                painter.fillRect(rect, QColor(self._accent.red(), self._accent.green(), self._accent.blue(), 180))
 
         # 画黑键与白键分隔
         for n in range(128):
@@ -85,7 +91,7 @@ class PianoRoll(QWidget):
 
         # 悬停 note
         if self._hover_note is not None and 0 <= self._hover_note < 128:
-            painter.setPen(QPen(Qt.red, 2))
+            painter.setPen(QPen(self._accent, 2))
             painter.drawRect(self._note_rect(self._hover_note))
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802

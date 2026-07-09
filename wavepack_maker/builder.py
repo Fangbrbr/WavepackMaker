@@ -25,7 +25,8 @@ ZONE_FLAG_MAX_SAME_NOTE_SHIFT = 4
 ZONE_FLAG_MAX_SAME_NOTE_MASK = 0xF0
 
 # Default ADSR: [attack_ms, decay_ms, sustain_level_0_255, release_ms]
-DEFAULT_ADSR: Tuple[int, int, int, int] = (5, 1500, 0, 120)
+# 默认值保持原始采样音量包络：A=0, D=0, S=255(峰值), R=0
+DEFAULT_ADSR: Tuple[int, int, int, int] = (0, 0, 255, 0)
 
 
 def _encode_flags(
@@ -309,10 +310,13 @@ class WavePackBuilder:
         """从 GUI 工程模型构造打包器。"""
         builder = cls(sample_rate=project.metadata.sample_rate)
 
+        # 工程目录，用于解析相对路径的采样文件
+        project_dir = Path(project.file_path).parent if project.file_path else None
+
         # 建立 sample_id -> builder sample_idx 映射
         sample_index_map: dict[str, int] = {}
         for sample in project.samples:
-            path = sample.resolve_path()
+            path = sample.resolve_path(project_dir)
             if not path.is_file():
                 raise FileNotFoundError(f"采样文件不存在: {path}")
             idx = builder.add_sample(

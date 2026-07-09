@@ -157,7 +157,7 @@ class SampleEntry:
             bits = wf.getsampwidth() * 8
             nframes = wf.getnframes()
 
-        name = file_path.stem[:8]  # 与二进制格式 name 字段对齐
+        name = file_path.stem  # 显示名使用完整文件名
         return SampleEntry(
             file_path=str(file_path),
             name=name,

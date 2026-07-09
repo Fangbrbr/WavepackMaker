@@ -41,6 +41,11 @@ class ZoneEditor(QGroupBox):
         # 初始不加载任何 Zone，但控件保持可用（避免显示为灰色禁用）
         self.set_zone(None)
 
+    def set_theme(self, theme) -> None:
+        """应用主题色到范围滑块。"""
+        self._note_range_slider.set_theme(theme)
+        self._vel_range_slider.set_theme(theme)
+
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -167,8 +172,8 @@ class ZoneEditor(QGroupBox):
             self._pitch_spin.setValue(0)
             self._attack_spin.setValue(0)
             self._decay_spin.setValue(0)
-            self._sustain_slider.setValue(0)
-            self._sustain_label.setText("0")
+            self._sustain_slider.setValue(255)
+            self._sustain_label.setText("255")
             self._release_spin.setValue(0)
             self._flags_edit.clear()
             self._validation_label.clear()

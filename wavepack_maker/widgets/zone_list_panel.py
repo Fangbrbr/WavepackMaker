@@ -42,6 +42,7 @@ class ZoneListPanel(QGroupBox):
         self._table.setHorizontalHeaderLabels(["名称", "音源采样", "根音", "Note 范围", "Vel 范围", "模式", "校验"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setTextElideMode(Qt.ElideRight)
         self._table.setFocusPolicy(Qt.NoFocus)  # 默认不显示焦点光标
         self._table.setStyleSheet(
             "QTableWidget { gridline-color: transparent; border: none; }"
@@ -53,8 +54,6 @@ class ZoneListPanel(QGroupBox):
             self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.itemSelectionChanged.connect(self._emit_selection)
-        self._table.itemChanged.connect(self._on_item_changed)
-        self._table.doubleClicked.connect(self._on_double_click)
         self._table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._table)
@@ -166,27 +165,6 @@ class ZoneListPanel(QGroupBox):
             self._on_duplicate()
         elif action == delete_action:
             self._on_remove()
-
-    def _on_double_click(self, index) -> None:
-        """双击名称列进入编辑模式。"""
-        if index.column() != 0:
-            return
-        row = index.row()
-        self._table.editItem(self._table.item(row, 0))
-
-    def _on_item_changed(self, item: QTableWidgetItem) -> None:
-        """列表项编辑完成后同步到 Zone 名称。"""
-        if item.column() != 0 or self._project is None:
-            return
-        zone_id = item.data(Qt.UserRole)
-        zone = self._project.get_zone(zone_id)
-        if zone is None:
-            return
-        new_name = item.text().strip()
-        if new_name and new_name != zone.name:
-            zone.name = new_name
-            if self._on_selection_changed:
-                self._on_selection_changed(zone)
 
     def _on_import_wav(self) -> None:
         if self._project is None:

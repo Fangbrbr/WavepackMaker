@@ -36,6 +36,7 @@ class SampleListPanel(QGroupBox):
         self._table.setHorizontalHeaderLabels(["#", "名称"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setTextElideMode(Qt.ElideRight)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.verticalHeader().setVisible(False)

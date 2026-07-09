@@ -11,7 +11,7 @@
     "notes": "",
     "sample_rate": 44100,
     "created_at": "2026-07-09T09:13:06.234372+00:00",
-    "updated_at": "2026-07-09T09:57:47.268952+00:00"
+    "updated_at": "2026-07-09T11:04:35.670028+00:00"
   },
   "samples": [
     {
@@ -46,6 +46,18 @@
       "channels": 2,
       "bits": 16,
       "nframes": 121494,
+      "root_note": 60,
+      "loop_start": 0,
+      "loop_end": 0
+    },
+    {
+      "id": "0ed65762",
+      "file_path": "samples\\China 1 Wet.wav",
+      "name": "China 1 ",
+      "sample_rate": 44100,
+      "channels": 2,
+      "bits": 16,
+      "nframes": 107604,
       "root_note": 60,
       "loop_start": 0,
       "loop_end": 0

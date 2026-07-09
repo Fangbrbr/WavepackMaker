@@ -21,10 +21,22 @@ class WaveformView(QWidget):
         self._loop_end: int = 0
         self._selection_start: Optional[int] = None
         self._selection_end: Optional[int] = None
+        self._accent: QColor = QColor(0, 150, 255)
+        self._bg: QColor = QColor(30, 30, 30)
         self.setMinimumHeight(180)
         self.setAutoFillBackground(True)
+        self._update_palette()
+
+    def set_theme(self, theme) -> None:
+        """应用主题色。"""
+        self._accent = theme.accent
+        self._bg = theme.background
+        self._update_palette()
+        self.update()
+
+    def _update_palette(self) -> None:
         pal = self.palette()
-        pal.setColor(self.backgroundRole(), QColor(245, 245, 245))
+        pal.setColor(self.backgroundRole(), self._bg)
         self.setPalette(pal)
 
     def load_wav(self, file_path: str | Path) -> bool:
@@ -118,6 +130,7 @@ class WaveformView(QWidget):
         mid = h // 2
 
         if not self._samples:
+            painter.setPen(Qt.white)
             painter.drawText(rect, Qt.AlignCenter, "无波形数据")
             return
 
@@ -126,7 +139,7 @@ class WaveformView(QWidget):
             return
 
         # 绘制波形
-        pen = QPen(Qt.darkBlue)
+        pen = QPen(self._accent)
         pen.setWidth(1)
         painter.setPen(pen)
         scale = (h / 2 - 2) / 32768.0
@@ -138,8 +151,8 @@ class WaveformView(QWidget):
         if self._loop_end > self._loop_start and self._samples:
             ls_x = int((self._loop_start / len(self._samples)) * w)
             le_x = int((self._loop_end / len(self._samples)) * w)
-            painter.fillRect(QRect(ls_x, 0, le_x - ls_x, h), QColor(0, 128, 255, 40))
-            painter.setPen(QPen(Qt.blue, 1, Qt.DashLine))
+            painter.fillRect(QRect(ls_x, 0, le_x - ls_x, h), QColor(self._accent.red(), self._accent.green(), self._accent.blue(), 60))
+            painter.setPen(QPen(self._accent, 1, Qt.DashLine))
             painter.drawLine(ls_x, 0, ls_x, h)
             painter.drawLine(le_x, 0, le_x, h)
 

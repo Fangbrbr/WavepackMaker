@@ -30,6 +30,7 @@ from ..validator import ValidationError, WavePackValidator
 from .metadata_panel import MetadataPanel
 from .piano_roll import PianoRoll
 from .sample_list_panel import SampleListPanel
+from .theme import ThemeManager
 from .waveform_view import WaveformView
 from .zone_editor import ZoneEditor
 from .zone_list_panel import ZoneListPanel
@@ -224,6 +225,13 @@ class MainWindow(QMainWindow):
         self._project_label = QLabel("未保存")
         self.statusBar().addPermanentWidget(self._project_label)
 
+    def set_theme(self, theme: ThemeManager) -> None:
+        """应用主题色到各子控件。"""
+        self._theme = theme
+        self._waveform_view.set_theme(theme)
+        self._piano_roll.set_theme(theme)
+        self._zone_editor.set_theme(theme)
+
     # ------------------------------------------------------------------
     # 工程生命周期
     # ------------------------------------------------------------------
@@ -239,8 +247,6 @@ class MainWindow(QMainWindow):
         self._bind_project()
         self._update_title()
         self._update_status()
-        # 主窗口显示后再延迟弹出新建工程对话框，避免界面未加载先弹窗
-        QTimer.singleShot(300, lambda: self._edit_properties(title="新建工程"))
 
     def _open_project(self) -> None:
         if not self._maybe_save_dirty():

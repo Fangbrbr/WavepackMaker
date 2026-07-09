@@ -3,7 +3,7 @@
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QMouseEvent, QPainter, QPen
+from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 
@@ -19,8 +19,14 @@ class RangeSlider(QWidget):
         self._low = minimum
         self._high = maximum
         self._dragging: Optional[str] = None  # 'low' / 'high'
+        self._accent: QColor = QColor(0, 150, 255)
         self.setMinimumHeight(28)
         self.setMaximumHeight(36)
+
+    def set_theme(self, theme) -> None:
+        """应用主题色。"""
+        self._accent = theme.accent
+        self.update()
 
     def set_range(self, low: int, high: int) -> None:
         low = max(self._minimum, min(self._maximum, low))
@@ -61,12 +67,12 @@ class RangeSlider(QWidget):
         # 选中范围
         x1 = self._x_for_value(self._low)
         x2 = self._x_for_value(self._high)
-        painter.setBrush(Qt.darkGreen)
+        painter.setBrush(self._accent)
         painter.drawRoundedRect(x1, mid - 4, x2 - x1, 8, 4, 4)
 
         # 两个滑块
         painter.setPen(QPen(Qt.white, 1))
-        painter.setBrush(Qt.darkBlue)
+        painter.setBrush(self._accent.darker(120))
         for value in (self._low, self._high):
             x = self._x_for_value(value)
             painter.drawEllipse(x - 6, mid - 6, 12, 12)
