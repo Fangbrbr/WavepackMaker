@@ -375,6 +375,12 @@ class Project:
         self.add_zone(zone)
         return zone
 
+    def _zones_overlap(self, a: ZoneEntry, b: ZoneEntry) -> bool:
+        """判断两个 Zone 的 note 范围与 velocity 范围同时存在交集。"""
+        note_overlap = a.min_note <= b.max_note and b.min_note <= a.max_note
+        vel_overlap = a.min_vel <= b.max_vel and b.min_vel <= a.max_vel
+        return note_overlap and vel_overlap
+
     def validate(self) -> List[str]:
         """返回工程级校验错误列表。"""
         errs: List[str] = []
@@ -393,6 +399,16 @@ class Project:
             zone_errs = z.validate()
             for e in zone_errs:
                 errs.append(f"Zone {z.name or z.id}: {e}")
+
+        # Zone 之间 (note, velocity) 范围不允许重叠
+        for i in range(len(self.zones)):
+            for j in range(i + 1, len(self.zones)):
+                a, b = self.zones[i], self.zones[j]
+                if self._zones_overlap(a, b):
+                    errs.append(
+                        f"Zone {a.name or a.id} 与 Zone {b.name or b.id} "
+                        f"的 Note/Velocity 范围存在重叠"
+                    )
         return errs
 
     def is_dirty(self, other_state: Optional[dict] = None) -> bool:

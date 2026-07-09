@@ -25,9 +25,9 @@ from ..project_io import load_project, save_project, suggest_project_name
 from ..validator import ValidationError, WavePackValidator
 from .metadata_panel import MetadataPanel
 from .piano_roll import PianoRoll
-from .sample_list_panel import SampleListPanel
 from .waveform_view import WaveformView
 from .zone_editor import ZoneEditor
+from .zone_list_panel import ZoneListPanel
 
 
 class MainWindow(QMainWindow):
@@ -75,10 +75,6 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
-        self._import_action = QAction("导入 WAV 到工程(&I)...", self)
-        self._import_action.triggered.connect(self._import_wav)
-        file_menu.addAction(self._import_action)
-
         self._export_action = QAction("导出 .wavepack(&E)...", self)
         self._export_action.triggered.connect(self._export_wavepack)
         file_menu.addAction(self._export_action)
@@ -108,7 +104,7 @@ class MainWindow(QMainWindow):
         main_splitter = QSplitter(Qt.Vertical)
         main_layout.addWidget(main_splitter)
 
-        # 上方面板：采样列表 | 采样配置
+        # 上方面板：Zone 列表 | Zone 配置
         top_widget = QWidget()
         top_layout = QHBoxLayout(top_widget)
         top_layout.setContentsMargins(0, 0, 0, 0)
@@ -116,9 +112,9 @@ class MainWindow(QMainWindow):
         top_splitter = QSplitter(Qt.Horizontal)
         top_layout.addWidget(top_splitter)
 
-        self._sample_panel = SampleListPanel()
-        self._sample_panel.set_on_selection_changed(self._on_sample_selected)
-        top_splitter.addWidget(self._sample_panel)
+        self._zone_list_panel = ZoneListPanel()
+        self._zone_list_panel.set_on_selection_changed(self._on_zone_selected)
+        top_splitter.addWidget(self._zone_list_panel)
 
         self._zone_editor = ZoneEditor()
         self._zone_editor.set_on_changed(self._on_zone_edited)
@@ -126,7 +122,7 @@ class MainWindow(QMainWindow):
         self._zone_editor.set_on_set_loop(self._on_apply_loop)
         top_splitter.addWidget(self._zone_editor)
 
-        # 列表占更大空间，方便管理大量 WAV
+        # Zone 列表占更大空间，方便管理大量 Zone
         top_splitter.setSizes([850, 550])
         top_splitter.setStretchFactor(0, 3)
         top_splitter.setStretchFactor(1, 2)
@@ -225,7 +221,7 @@ class MainWindow(QMainWindow):
             return False
 
     def _bind_project(self) -> None:
-        self._sample_panel.set_project(self._project)
+        self._zone_list_panel.set_project(self._project)
         self._zone_editor.set_project(self._project)
         self._zone_editor.set_zone(None)
         self._update_piano_roll()
@@ -259,34 +255,32 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"WavePack Maker - {name}{dirty} [{path}]")
 
     def _update_status(self) -> None:
-        n_samples = len(self._project.samples)
         n_zones = len(self._project.zones)
         if self._project_file_path:
             self._project_label.setText(Path(self._project_file_path).name)
         else:
             self._project_label.setText("未保存")
-        self._status_label.setText(f"采样: {n_samples}")
+        self._status_label.setText(f"Zone: {n_zones}")
         self._update_title()
 
     # ------------------------------------------------------------------
     # 交互回调
     # ------------------------------------------------------------------
-    def _on_sample_selected(self, sample: Optional[SampleEntry]) -> None:
-        if sample is None:
-            self._zone_editor.set_zone(None)
-            self._waveform_view.clear()
-            self._update_piano_roll()
-            return
-
-        # 确保每个 Sample 都有对应的 Zone
-        zone = self._project.ensure_zone_for_sample(sample)
+    def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
         self._zone_editor.set_zone(zone)
-        self._waveform_view.load_wav(sample.resolve_path())
+        if zone is not None:
+            sample = self._project.get_sample(zone.sample_id)
+            if sample is not None:
+                self._waveform_view.load_wav(sample.resolve_path())
+            else:
+                self._waveform_view.clear()
+        else:
+            self._waveform_view.clear()
         self._update_piano_roll()
 
     def _on_zone_edited(self) -> None:
         # Zone 参数变更后刷新列表中的汇总列
-        self._sample_panel.refresh()
+        self._zone_list_panel.refresh()
         self._update_piano_roll()
         self._update_status()
 
@@ -298,11 +292,13 @@ class MainWindow(QMainWindow):
     def _on_apply_loop(self, start: int, end: int) -> None:
         # 实际区间从波形视图读取
         start, end = self._waveform_view.get_loop_region()
-        sample = self._sample_panel.selected_sample()
-        if sample is not None:
-            sample.loop_start = start
-            sample.loop_end = end
-            self._status_label.setText(f"已设置循环: {start} ~ {end}")
+        zone = self._zone_list_panel.selected_zone()
+        if zone is not None:
+            sample = self._project.get_sample(zone.sample_id)
+            if sample is not None:
+                sample.loop_start = start
+                sample.loop_end = end
+                self._status_label.setText(f"已设置循环: {start} ~ {end}")
 
     def _update_piano_roll(self) -> None:
         zone = self._zone_editor._zone
@@ -312,12 +308,12 @@ class MainWindow(QMainWindow):
             self._piano_roll.clear_highlight()
 
     def _on_piano_key_clicked(self, note: int) -> None:
-        """点击钢琴键：若 note 在当前 Zone 范围内则播放对应采样。"""
+        """点击钢琴键：若 note 在当前 Zone 范围内则播放对应音源。"""
         zone = self._zone_editor._zone
         if zone is None:
             return
         if not (zone.min_note <= note <= zone.max_note):
-            self._status_label.setText(f"Note {note} 不在当前采样音域内")
+            self._status_label.setText(f"Note {note} 不在当前 Zone 音域内")
             return
         sample = self._project.get_sample(zone.sample_id)
         if sample is not None:
@@ -325,9 +321,6 @@ class MainWindow(QMainWindow):
             if path.is_file():
                 self._audio_player.play(path)
                 self._status_label.setText(f"预览 Note {note}: {sample.name}")
-
-    def _import_wav(self) -> None:
-        self._sample_panel._on_import()
 
     def _edit_properties(self) -> None:
         """弹出工程属性对话框编辑身份证元数据。"""

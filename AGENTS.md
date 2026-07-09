@@ -49,9 +49,9 @@ wavepack_maker/
 │       ├── __init__.py
 │       ├── main_window.py       # 主窗口、菜单、工程生命周期、导出
 │       ├── metadata_panel.py    # 身份证元数据表单
-│       ├── sample_list_panel.py # 采样列表：导入/删除/重新定位，显示每个采样的 Note/Vel/复音模式汇总
-│       ├── zone_list_panel.py   # 已保留但当前主界面不再显示；采样配置通过 zone_editor 直接编辑
-│       ├── zone_editor.py       # 采样配置面板：根音/范围/力度/ADSR/复音模式/flags
+│       ├── sample_list_panel.py # 已保留但当前主界面不再显示；音源管理通过 Zone 配置中的下拉框完成
+│       ├── zone_list_panel.py   # Zone 列表：增删/复制/导入音源，显示每个 Zone 的 Note/Vel/复音模式/校验状态
+│       ├── zone_editor.py       # Zone 配置面板：根音/范围/力度/ADSR/复音模式/flags/音源采样选择
 │       ├── waveform_view.py     # 波形绘制 + 循环区间鼠标框选
 │       └── piano_roll.py        # MIDI note 0-127 钢琴卷帘高亮
 ├── tests/test_wavepack_maker.py # 单元测试
@@ -73,14 +73,14 @@ GUI 编辑 → Project 模型 → .wpp JSON
 
 ### 主界面布局
 
-当前 GUI 简化为"采样即配置"的心智模型，主界面分为：
+当前 GUI 以 **Zone** 为核心，符合 `.wavepack` 协议的设计哲学：一个 Zone 定义一个 `(note 范围, velocity 范围)`，并指定一个 WAV 作为音源。主界面分为：
 
-1. **左上：采样列表**——显示所有 WAV，列包含根音、Note 范围、Velocity 范围、复音模式等汇总信息。
-2. **右上：采样配置**——选中某个采样后，直接编辑其对应的 Zone 参数（根音/范围/力度/ADSR/复音模式）。
-3. **中下：波形预览**——显示当前选中 WAV 的波形，并支持鼠标框选 loop 区间。
-4. **底部：钢琴键**——高度较矮，高亮当前 Zone 的 note 范围；点击钢琴键可在当前 Zone 音域内试听对应采样。
+1. **左上：Zone 列表**——显示所有 Zone，列包含名称、音源采样、根音、Note 范围、Velocity 范围、复音模式、校验状态。
+2. **右上：Zone 配置**——选中某个 Zone 后，编辑其 Note/Velocity 范围、根音、ADSR、复音模式，并选择该 Zone 使用的 WAV 音源。
+3. **中下：波形预览**——显示当前 Zone 所选 WAV 的波形，并支持鼠标框选 loop 区间。
+4. **底部：钢琴键**——高度较矮，高亮当前 Zone 的 note 范围；点击钢琴键可在当前 Zone 音域内试听对应音源。
 
-> 说明：底层 `.wavepack` 格式仍允许一个 Sample 被多个 Zone 引用，但上位机 UI 强制一个 Sample 对应一个 Zone。导入 WAV 时自动创建默认 Zone；删除采样时同步删除其 Zone。工程身份证元数据通过菜单「文件 → 工程属性」编辑，不再常驻主界面。
+> 说明：底层 `.wavepack` 格式中 Zone 与 Sample 解耦，多个 Zone 可引用同一个 Sample；上位机 UI 仍允许这种复用，只需在多个 Zone 中指定同一音源即可。工程身份证元数据通过菜单「文件 → 工程属性」编辑，不再常驻主界面。
 
 ---
 
@@ -153,6 +153,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build_exe.ps1
 - **校验分层**：
   - 模型层：`ZoneEntry.validate()` / `Project.validate()`
   - 二进制层：`WavePackValidator` 按 TechSpec 逐项校验
+- **提交纪律**：
+  - 每次 Python 代码改动后必须执行编译检测（`.py` 文件）：
+    ```powershell
+    PYTHONPATH=. .venv/Scripts/python.exe -m py_compile main.py wavepack_maker/models.py wavepack_maker/builder.py wavepack_maker/validator.py wavepack_maker/widgets/*.py
+    ```
+  - 编译检测通过后，必须执行 `git add` 与 `git commit` 提交本次修改。
+  - 提交信息使用中文，简要说明改动内容。
 
 ---
 
@@ -216,8 +223,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build_exe.ps1
 | 修改 `.wavepack` 校验规则 | `wavepack_maker/validator.py` |
 | 修改数据模型或校验规则 | `wavepack_maker/models.py` |
 | 修改 GUI 主窗口/菜单/导出流程 | `wavepack_maker/widgets/main_window.py` |
-| 修改采样列表显示/导入逻辑 | `wavepack_maker/widgets/sample_list_panel.py` |
-| 修改采样配置（Zone）编辑表单 | `wavepack_maker/widgets/zone_editor.py` |
+| 修改 Zone 列表/导入音源逻辑 | `wavepack_maker/widgets/zone_list_panel.py` |
+| 修改 Zone 配置编辑表单 | `wavepack_maker/widgets/zone_editor.py` |
 | 修改钢琴键预览/高亮 | `wavepack_maker/widgets/piano_roll.py` |
 | 修改身份证元数据表单 | `wavepack_maker/widgets/metadata_panel.py` |
 | 添加/修改测试 | `tests/test_wavepack_maker.py` |

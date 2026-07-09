@@ -1,4 +1,4 @@
-"""采样配置编辑器（底层对应一个 Zone）。"""
+"""Zone 参数编辑器。"""
 
 from typing import Callable, List, Optional
 
@@ -21,10 +21,10 @@ from ..models import Project, SampleEntry, ZoneEntry
 
 
 class ZoneEditor(QGroupBox):
-    """编辑单个采样对应的 Zone 参数。"""
+    """编辑单个 Zone 的所有参数，包括指定其音源采样。"""
 
     def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__("采样配置", parent)
+        super().__init__("Zone 配置", parent)
         self._project: Optional[Project] = None
         self._zone: Optional[ZoneEntry] = None
         self._on_changed: Optional[Callable[[], None]] = None
@@ -41,27 +41,28 @@ class ZoneEditor(QGroupBox):
         self._name_edit = QLineEdit()
         self._name_edit.textChanged.connect(self._on_field_changed)
 
-        self._sample_label = QLabel("-")
+        self._sample_combo = QComboBox()
+        self._sample_combo.currentIndexChanged.connect(self._on_sample_changed)
 
         self._root_spin = QSpinBox()
         self._root_spin.setRange(0, 127)
-        self._root_spin.valueChanged.connect(self._on_field_changed)
+        self._root_spin.valueChanged.connect(self._on_root_changed)
 
         self._min_note_spin = QSpinBox()
         self._min_note_spin.setRange(0, 127)
-        self._min_note_spin.valueChanged.connect(self._on_field_changed)
+        self._min_note_spin.valueChanged.connect(self._on_min_note_changed)
 
         self._max_note_spin = QSpinBox()
         self._max_note_spin.setRange(0, 127)
-        self._max_note_spin.valueChanged.connect(self._on_field_changed)
+        self._max_note_spin.valueChanged.connect(self._on_max_note_changed)
 
         self._min_vel_spin = QSpinBox()
         self._min_vel_spin.setRange(0, 127)
-        self._min_vel_spin.valueChanged.connect(self._on_field_changed)
+        self._min_vel_spin.valueChanged.connect(self._on_min_vel_changed)
 
         self._max_vel_spin = QSpinBox()
         self._max_vel_spin.setRange(0, 127)
-        self._max_vel_spin.valueChanged.connect(self._on_field_changed)
+        self._max_vel_spin.valueChanged.connect(self._on_max_vel_changed)
 
         self._poly_mode_combo = QComboBox()
         self._poly_mode_combo.addItems(["retrigger", "multi", "legato"])
@@ -113,7 +114,7 @@ class ZoneEditor(QGroupBox):
         self._validation_label.setWordWrap(True)
 
         form.addRow("名称:", self._name_edit)
-        form.addRow("关联采样:", self._sample_label)
+        form.addRow("音源采样:", self._sample_combo)
         form.addRow("根音 (Root):", self._root_spin)
         form.addRow("最低 Note:", self._min_note_spin)
         form.addRow("最高 Note:", self._max_note_spin)
@@ -129,10 +130,10 @@ class ZoneEditor(QGroupBox):
         layout.addLayout(form)
 
         btn_layout = QHBoxLayout()
-        self._play_btn = QPushButton("▶ 播放采样")
+        self._play_btn = QPushButton("▶ 播放音源")
         self._play_btn.clicked.connect(self._on_play_clicked)
         self._loop_btn = QPushButton("应用循环区间")
-        self._loop_btn.setToolTip("将波形视图中框选的区间设为该采样的 loop 范围")
+        self._loop_btn.setToolTip("将波形视图中框选的区间设为该 Zone 音源采样的 loop 范围")
         self._loop_btn.clicked.connect(self._on_loop_clicked)
         btn_layout.addWidget(self._play_btn)
         btn_layout.addWidget(self._loop_btn)
@@ -141,18 +142,20 @@ class ZoneEditor(QGroupBox):
 
     def set_project(self, project: Project) -> None:
         self._project = project
+        self._refresh_sample_combo()
 
     def set_zone(self, zone: Optional[ZoneEntry]) -> None:
         self._zone = zone
         self.setEnabled(zone is not None)
         if zone is None:
-            self._sample_label.setText("-")
             return
 
         self.blockSignals(True)
         self._name_edit.setText(zone.name)
-        sample = self._project.get_sample(zone.sample_id) if self._project else None
-        self._sample_label.setText(sample.name if sample else "-")
+        self._refresh_sample_combo()
+        index = self._sample_combo.findData(zone.sample_id)
+        if index >= 0:
+            self._sample_combo.setCurrentIndex(index)
         self._root_spin.setValue(zone.root_note)
         self._min_note_spin.setValue(zone.min_note)
         self._max_note_spin.setValue(zone.max_note)
@@ -179,6 +182,93 @@ class ZoneEditor(QGroupBox):
     def set_on_set_loop(self, callback: Callable[[int, int], None]) -> None:
         self._on_set_loop = callback
 
+    def _refresh_sample_combo(self) -> None:
+        self._sample_combo.clear()
+        if self._project is None:
+            return
+        for sample in self._project.samples:
+            self._sample_combo.addItem(sample.name, sample.id)
+
+    def _on_sample_changed(self) -> None:
+        if self._zone is None:
+            return
+        sample_id = self._sample_combo.currentData()
+        if sample_id:
+            self._zone.sample_id = sample_id
+        self._on_field_changed()
+
+    def _on_root_changed(self, value: int) -> None:
+        if self._zone is None:
+            return
+        # 根音必须在 [min_note, max_note] 范围内
+        value = max(self._zone.min_note, min(self._zone.max_note, value))
+        self._root_spin.blockSignals(True)
+        self._root_spin.setValue(value)
+        self._root_spin.blockSignals(False)
+        self._zone.root_note = value
+        self._on_field_changed()
+
+    def _on_min_note_changed(self, value: int) -> None:
+        if self._zone is None:
+            return
+        # 保证 min <= max
+        if value > self._zone.max_note:
+            self._max_note_spin.blockSignals(True)
+            self._max_note_spin.setValue(value)
+            self._max_note_spin.blockSignals(False)
+            self._zone.max_note = value
+        self._zone.min_note = value
+        # 根音同步到范围内
+        self._clamp_root()
+        self._on_field_changed()
+
+    def _on_max_note_changed(self, value: int) -> None:
+        if self._zone is None:
+            return
+        # 保证 max >= min
+        if value < self._zone.min_note:
+            self._min_note_spin.blockSignals(True)
+            self._min_note_spin.setValue(value)
+            self._min_note_spin.blockSignals(False)
+            self._zone.min_note = value
+        self._zone.max_note = value
+        # 根音同步到范围内
+        self._clamp_root()
+        self._on_field_changed()
+
+    def _on_min_vel_changed(self, value: int) -> None:
+        if self._zone is None:
+            return
+        if value > self._zone.max_vel:
+            self._max_vel_spin.blockSignals(True)
+            self._max_vel_spin.setValue(value)
+            self._max_vel_spin.blockSignals(False)
+            self._zone.max_vel = value
+        self._zone.min_vel = value
+        self._on_field_changed()
+
+    def _on_max_vel_changed(self, value: int) -> None:
+        if self._zone is None:
+            return
+        if value < self._zone.min_vel:
+            self._min_vel_spin.blockSignals(True)
+            self._min_vel_spin.setValue(value)
+            self._min_vel_spin.blockSignals(False)
+            self._zone.min_vel = value
+        self._zone.max_vel = value
+        self._on_field_changed()
+
+    def _clamp_root(self) -> None:
+        """将根音限制到 [min_note, max_note] 范围内。"""
+        if self._zone is None:
+            return
+        new_root = max(self._zone.min_note, min(self._zone.max_note, self._zone.root_note))
+        if new_root != self._zone.root_note:
+            self._root_spin.blockSignals(True)
+            self._root_spin.setValue(new_root)
+            self._root_spin.blockSignals(False)
+            self._zone.root_note = new_root
+
     def _on_sustain_changed(self, value: int) -> None:
         self._sustain_label.setText(str(value))
         self._on_field_changed()
@@ -187,11 +277,6 @@ class ZoneEditor(QGroupBox):
         if self._zone is None:
             return
         self._zone.name = self._name_edit.text()
-        self._zone.root_note = self._root_spin.value()
-        self._zone.min_note = self._min_note_spin.value()
-        self._zone.max_note = self._max_note_spin.value()
-        self._zone.min_vel = self._min_vel_spin.value()
-        self._zone.max_vel = self._max_vel_spin.value()
         self._zone.poly_mode = self._poly_mode_combo.currentText()
         self._zone.max_same_note_voices = self._max_same_spin.value()
         self._zone.pitch_cents = self._pitch_spin.value()

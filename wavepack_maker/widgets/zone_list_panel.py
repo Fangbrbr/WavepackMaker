@@ -1,13 +1,17 @@
 """Zone 列表面板。"""
 
+import copy
+from pathlib import Path
 from typing import Callable, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -19,7 +23,7 @@ from ..models import Project, SampleEntry, ZoneEntry
 
 
 class ZoneListPanel(QGroupBox):
-    """展示工程内所有 Zone，支持增删。"""
+    """展示工程内所有 Zone，支持增删/复制/导入音源。"""
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("Zone 列表", parent)
@@ -31,21 +35,28 @@ class ZoneListPanel(QGroupBox):
         layout = QVBoxLayout(self)
 
         self._table = QTableWidget()
-        self._table.setColumnCount(6)
-        self._table.setHorizontalHeaderLabels(["名称", "采样", "根音", "Note 范围", "Vel 范围", "模式"])
+        self._table.setMinimumHeight(300)
+        self._table.setColumnCount(7)
+        self._table.setHorizontalHeaderLabels(["名称", "音源采样", "根音", "Note 范围", "Vel 范围", "模式", "校验"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        for col in range(7):
+            self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.itemSelectionChanged.connect(self._emit_selection)
         layout.addWidget(self._table)
 
         btn_layout = QHBoxLayout()
+        self._import_btn = QPushButton("导入 WAV")
+        self._import_btn.setToolTip("导入一个或多个 WAV 文件作为可选音源")
+        self._import_btn.clicked.connect(self._on_import_wav)
         self._add_btn = QPushButton("添加 Zone")
         self._add_btn.clicked.connect(self._on_add)
         self._remove_btn = QPushButton("删除")
         self._remove_btn.clicked.connect(self._on_remove)
         self._duplicate_btn = QPushButton("复制")
         self._duplicate_btn.clicked.connect(self._on_duplicate)
+        btn_layout.addWidget(self._import_btn)
         btn_layout.addWidget(self._add_btn)
         btn_layout.addWidget(self._remove_btn)
         btn_layout.addWidget(self._duplicate_btn)
@@ -59,7 +70,17 @@ class ZoneListPanel(QGroupBox):
     def set_on_selection_changed(self, callback: Callable[[Optional[ZoneEntry]], None]) -> None:
         self._on_selection_changed = callback
 
+    def _get_sample(self, sample_id: str) -> Optional[SampleEntry]:
+        return self._project.get_sample(sample_id) if self._project else None
+
     def refresh(self) -> None:
+        selected_id = None
+        rows = self._table.selectionModel().selectedRows()
+        if rows:
+            item = self._table.item(rows[0].row(), 0)
+            if item is not None:
+                selected_id = item.data(Qt.UserRole)
+
         self._table.setRowCount(0)
         if self._project is None:
             return
@@ -70,13 +91,27 @@ class ZoneListPanel(QGroupBox):
             name_item.setData(Qt.UserRole, zone.id)
             self._table.setItem(row, 0, name_item)
 
-            sample = self._project.get_sample(zone.sample_id)
+            sample = self._get_sample(zone.sample_id)
             sample_name = sample.name if sample else "(丢失)"
             self._table.setItem(row, 1, QTableWidgetItem(sample_name))
             self._table.setItem(row, 2, QTableWidgetItem(str(zone.root_note)))
             self._table.setItem(row, 3, QTableWidgetItem(f"{zone.min_note}-{zone.max_note}"))
             self._table.setItem(row, 4, QTableWidgetItem(f"{zone.min_vel}-{zone.max_vel}"))
             self._table.setItem(row, 5, QTableWidgetItem(zone.poly_mode))
+
+            errs = zone.validate()
+            status_item = QTableWidgetItem("OK" if not errs else "错误")
+            if errs:
+                status_item.setForeground(Qt.red)
+                status_item.setToolTip("\n".join(errs))
+            else:
+                status_item.setForeground(Qt.green)
+            self._table.setItem(row, 6, status_item)
+
+        if selected_id is not None:
+            self._table.blockSignals(True)
+            self._select_zone(selected_id)
+            self._table.blockSignals(False)
 
     def selected_zone(self) -> Optional[ZoneEntry]:
         rows = self._table.selectionModel().selectedRows()
@@ -89,17 +124,44 @@ class ZoneListPanel(QGroupBox):
         zone_id = item.data(Qt.UserRole)
         return self._project.get_zone(zone_id)
 
+    def _select_zone(self, zone_id: str) -> None:
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 0)
+            if item and item.data(Qt.UserRole) == zone_id:
+                self._table.selectRow(row)
+                break
+
     def _emit_selection(self) -> None:
         if self._on_selection_changed:
             self._on_selection_changed(self.selected_zone())
 
+    def _on_import_wav(self) -> None:
+        if self._project is None:
+            return
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "导入 WAV 音源", "", "WAV 文件 (*.wav)"
+        )
+        imported: List[SampleEntry] = []
+        for path in files:
+            try:
+                sample = SampleEntry.from_wav(path)
+                self._project.add_sample(sample)
+                imported.append(sample)
+            except Exception as e:
+                QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
+        if imported and self._on_selection_changed:
+            # 导入音源后保持当前 Zone 选中，不切换
+            self.refresh()
+            self._emit_selection()
+
     def _on_add(self) -> None:
-        if self._project is None or not self._project.samples:
-            from PySide6.QtWidgets import QMessageBox
-            QMessageBox.information(self, "提示", "请先导入 WAV 采样")
+        if self._project is None:
+            return
+        if not self._project.samples:
+            QMessageBox.information(self, "提示", "请先导入 WAV 音源")
             return
 
-        sample = self._project.samples[0]
+        sample = self._project.samples[-1]
         zone = ZoneEntry(
             sample_id=sample.id,
             name=f"Zone {len(self._project.zones) + 1}",
@@ -124,7 +186,6 @@ class ZoneListPanel(QGroupBox):
         zone = self.selected_zone()
         if zone is None or self._project is None:
             return
-        import copy
         new_zone = copy.deepcopy(zone)
         new_zone.id = f"{new_zone.id}_dup"
         new_zone.name = f"{new_zone.name or 'Zone'} 副本"
@@ -132,13 +193,6 @@ class ZoneListPanel(QGroupBox):
         self.refresh()
         self._select_zone(new_zone.id)
         self._emit_selection()
-
-    def _select_zone(self, zone_id: str) -> None:
-        for row in range(self._table.rowCount()):
-            item = self._table.item(row, 0)
-            if item and item.data(Qt.UserRole) == zone_id:
-                self._table.selectRow(row)
-                break
 
     def get_all_zones(self) -> List[ZoneEntry]:
         return list(self._project.zones) if self._project else []
