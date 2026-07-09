@@ -1,6 +1,7 @@
 """WavePack Maker 主窗口。"""
 
 import shutil
+import wave
 from pathlib import Path
 from typing import Optional
 
@@ -209,6 +210,7 @@ class MainWindow(QMainWindow):
         self._zone_editor.set_on_changed(self._on_zone_edited)
         self._zone_editor.set_on_play(self._on_play_sample)
         self._zone_editor.set_on_set_loop(self._on_apply_loop)
+        self._zone_editor.set_on_crop(self._on_crop_sample)
         top_splitter.addWidget(self._zone_editor)
 
         # 采样清单较窄，Zone 列表和配置占主要空间
@@ -518,6 +520,71 @@ class MainWindow(QMainWindow):
         """应用循环区间按钮：将波形视图当前框选区间写入采样。"""
         start, end = self._waveform_view.get_loop_region()
         self._on_loop_changed(start, end)
+
+    def _on_crop_sample(self, start: int, end: int) -> None:
+        """根据波形视图的裁剪区，删除采样框选外的数据以减小体积。"""
+        sample = self._sample_panel.selected_sample()
+        if sample is None:
+            return
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
+        path = sample.resolve_path(project_dir)
+        if not path.is_file():
+            QMessageBox.warning(self, "裁剪失败", "采样文件不存在")
+            return
+
+        start, end = self._waveform_view.get_trim_region()
+        if end <= start:
+            QMessageBox.information(self, "裁剪", "请先框选有效的裁剪区域（Ctrl+左键/右键）")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "裁剪采样",
+            f"确定裁剪采样 \"{sample.name}\" 吗？\n"
+            f"将保留 frame {start} ~ {end} 之间的数据，其余部分永久删除。",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            with wave.open(str(path), "rb") as wf:
+                nch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                sr = wf.getframerate()
+                nframes = wf.getnframes()
+                start = max(0, min(start, nframes))
+                end = max(start, min(end, nframes))
+                wf.setpos(start)
+                raw = wf.readframes(end - start)
+
+            with wave.open(str(path), "wb") as wf:
+                wf.setnchannels(nch)
+                wf.setsampwidth(sw)
+                wf.setframerate(sr)
+                wf.writeframes(raw)
+
+            # 更新 SampleEntry 元数据与 loop 标记
+            sample.nframes = end - start
+            sample.sample_rate = sr
+            sample.channels = nch
+            sample.bits = sw * 8
+            if sample.loop_start >= sample.nframes or sample.loop_end > sample.nframes:
+                sample.loop_start = 0
+                sample.loop_end = sample.nframes
+
+            # 刷新 UI
+            self._waveform_view.load_wav(path)
+            self._waveform_view.set_loop_region(sample.loop_start, sample.loop_end)
+            self._waveform_view.set_trim_region(0, sample.nframes)
+            self._sample_panel.refresh()
+            self._zone_list_panel.refresh()
+            self._last_save_state = self._project.to_dict()
+            self._update_title()
+            self._update_status()
+            self._status_label.setText(f"已裁剪采样: {sample.name} ({start}~{end})")
+        except Exception as e:
+            QMessageBox.critical(self, "裁剪失败", str(e))
 
     def _update_piano_roll(self) -> None:
         widget = self._piano_roll_widget

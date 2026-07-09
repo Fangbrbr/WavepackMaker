@@ -37,6 +37,7 @@ class ZoneEditor(QGroupBox):
         self._on_changed: Optional[Callable[[], None]] = None
         self._on_play: Optional[Callable[[SampleEntry], None]] = None
         self._on_set_loop: Optional[Callable[[int, int], None]] = None
+        self._on_crop: Optional[Callable[[int, int], None]] = None
         self._loading_zone = False
         self._setup_ui()
         # 初始不加载任何 Zone，但控件保持可用（避免显示为灰色禁用）
@@ -167,8 +168,12 @@ class ZoneEditor(QGroupBox):
         self._loop_btn = QPushButton("应用循环区间")
         self._loop_btn.setToolTip("将波形视图中框选的区间设为该 Zone 音源采样的 loop 范围")
         self._loop_btn.clicked.connect(self._on_loop_clicked)
+        self._crop_btn = QPushButton("✂ 裁剪采样")
+        self._crop_btn.setToolTip("Ctrl+左键/右键在波形视图中框选裁剪区后，点此按钮删除框选外的拖尾音")
+        self._crop_btn.clicked.connect(self._on_crop_clicked)
         btn_layout.addWidget(self._play_btn)
         btn_layout.addWidget(self._loop_btn)
+        btn_layout.addWidget(self._crop_btn)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
@@ -229,6 +234,9 @@ class ZoneEditor(QGroupBox):
 
     def set_on_set_loop(self, callback: Callable[[int, int], None]) -> None:
         self._on_set_loop = callback
+
+    def set_on_crop(self, callback: Callable[[int, int], None]) -> None:
+        self._on_crop = callback
 
     def _refresh_sample_combo(self) -> None:
         self._sample_combo.clear()
@@ -341,3 +349,7 @@ class ZoneEditor(QGroupBox):
     def _on_loop_clicked(self) -> None:
         if self._on_set_loop is not None:
             self._on_set_loop(0, 0)
+
+    def _on_crop_clicked(self) -> None:
+        if self._on_crop is not None:
+            self._on_crop(0, 0)

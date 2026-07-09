@@ -335,6 +335,14 @@ class WavePackBuilder:
                 raise ValueError(f"Zone 引用了不存在的采样: {zone.sample_id}")
 
             flags = zone.encoded_flags()
+            # 若对应采样配置了有效 loop，在 Zone flags 中追加 LOOP 位，确保下位机循环生效
+            sample = project.get_sample(zone.sample_id)
+            if (
+                sample is not None
+                and sample.loop_end > sample.loop_start
+                and sample.loop_start >= 0
+            ):
+                flags |= ZONE_FLAG_LOOP
             builder.zones.append(
                 {
                     "zone_id": len(builder.zones),

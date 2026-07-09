@@ -1,4 +1,4 @@
-"""波形显示组件：读取 WAV 并缩略绘制，支持标记循环点。"""
+"""波形显示组件：读取 WAV 并缩略绘制，支持标记循环点与裁剪区。"""
 
 import array
 import wave
@@ -11,9 +11,11 @@ from PySide6.QtWidgets import QWidget
 
 
 class WaveformView(QWidget):
-    """显示单声道 16-bit WAV 波形，支持左键/右键标记循环起止点。"""
+    """显示单声道 16-bit WAV 波形，支持左键/右键标记循环起止点，
+    Ctrl+左键/Ctrl+右键标记裁剪起止点。"""
 
     loop_changed = Signal(int, int)
+    trim_changed = Signal(int, int)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -21,12 +23,15 @@ class WaveformView(QWidget):
         self._sample_rate: int = 44100
         self._loop_start: int = 0
         self._loop_end: int = 0
+        self._trim_start: int = 0
+        self._trim_end: int = 0
         self._editable: bool = False
-        self._dragging: Optional[str] = None  # 'start' / 'end'
+        self._dragging: Optional[str] = None  # 'loop_start' / 'loop_end' / 'trim_start' / 'trim_end'
         self._accent: QColor = QColor(0, 150, 255)
         self._bg: QColor = QColor(30, 30, 30)
         self._start_color: QColor = QColor(255, 255, 255)
         self._end_color: QColor = QColor(255, 220, 0)
+        self._trim_color: QColor = QColor(255, 60, 60)
         self.setMinimumHeight(180)
         self.setAutoFillBackground(True)
         self._update_palette()
@@ -44,7 +49,7 @@ class WaveformView(QWidget):
         self.setPalette(pal)
 
     def set_editable(self, editable: bool) -> None:
-        """设置循环标记是否可编辑。"""
+        """设置循环/裁剪标记是否可编辑。"""
         self._editable = editable
         if not editable:
             self._dragging = None
@@ -84,8 +89,11 @@ class WaveformView(QWidget):
             self.update()
             return False
 
+        n = len(self._samples)
         self._loop_start = 0
-        self._loop_end = len(self._samples)
+        self._loop_end = n
+        self._trim_start = 0
+        self._trim_end = n
         self._dragging = None
         self.update()
         return True
@@ -94,6 +102,8 @@ class WaveformView(QWidget):
         self._samples = []
         self._loop_start = 0
         self._loop_end = 0
+        self._trim_start = 0
+        self._trim_end = 0
         self._dragging = None
         self.update()
 
@@ -109,6 +119,18 @@ class WaveformView(QWidget):
     def get_loop_region(self) -> tuple[int, int]:
         return self._loop_start, self._loop_end
 
+    def set_trim_region(self, start: int, end: int) -> None:
+        """设置裁剪区间（样本 frame 数）。"""
+        if self._samples:
+            end = max(start, min(end, len(self._samples)))
+            start = max(0, min(start, end))
+        self._trim_start = start
+        self._trim_end = end
+        self.update()
+
+    def get_trim_region(self) -> tuple[int, int]:
+        return self._trim_start, self._trim_end
+
     def frame_at_x(self, x: int) -> int:
         """将鼠标 X 坐标转换为样本 frame 索引。"""
         if not self._samples:
@@ -123,18 +145,25 @@ class WaveformView(QWidget):
         width = max(1, self.width())
         return int((frame / len(self._samples)) * width)
 
-    def _nearby_loop_handle(self, x: int) -> Optional[str]:
-        """判断鼠标 X 是否靠近 loop start/end 光标。"""
+    def _nearby_handle(self, x: int) -> Optional[str]:
+        """判断鼠标 X 是否靠近某个手柄（loop/trim）。"""
         if not self._samples or not self._editable:
             return None
-        sx = self._x_for_frame(self._loop_start)
-        ex = self._x_for_frame(self._loop_end)
+        handles = {
+            "loop_start": self._x_for_frame(self._loop_start),
+            "loop_end": self._x_for_frame(self._loop_end),
+            "trim_start": self._x_for_frame(self._trim_start),
+            "trim_end": self._x_for_frame(self._trim_end),
+        }
         threshold = 8
-        if abs(x - sx) <= threshold:
-            return "start"
-        if abs(x - ex) <= threshold:
-            return "end"
-        return None
+        best = None
+        best_dist = threshold + 1
+        for name, hx in handles.items():
+            dist = abs(x - hx)
+            if dist < best_dist:
+                best_dist = dist
+                best = name
+        return best
 
     def _downsample(self, target_width: int) -> List[int]:
         """降采样到目标像素宽度，返回每个像素的最大振幅绝对值。"""
@@ -178,6 +207,14 @@ class WaveformView(QWidget):
         for x, peak in enumerate(peaks):
             amp = int(peak * scale)
             painter.drawLine(x, mid - amp, x, mid + amp)
+
+        # 绘制裁剪区域背景（红色半透明）
+        ts_x = self._x_for_frame(self._trim_start)
+        te_x = self._x_for_frame(self._trim_end)
+        painter.fillRect(ts_x, 0, te_x - ts_x, wave_h, QColor(self._trim_color.red(), self._trim_color.green(), self._trim_color.blue(), 40))
+        painter.setPen(QPen(self._trim_color, 2))
+        painter.drawLine(ts_x, 0, ts_x, wave_h)
+        painter.drawLine(te_x, 0, te_x, wave_h)
 
         # 绘制循环起始/结束光标
         ls_x = self._x_for_frame(self._loop_start)
@@ -226,18 +263,30 @@ class WaveformView(QWidget):
         if not self._samples or not self._editable:
             return
         x = int(event.position().x())
-        handle = self._nearby_loop_handle(x)
+        frame = self.frame_at_x(x)
+        ctrl = event.modifiers() & Qt.ControlModifier
+
+        handle = self._nearby_handle(x)
         if handle is not None:
             self._dragging = handle
             return
-        frame = self.frame_at_x(x)
-        if event.button() == Qt.LeftButton:
-            self._loop_start = max(0, min(frame, self._loop_end))
-            self._dragging = "start"
-        elif event.button() == Qt.RightButton:
-            self._loop_end = max(self._loop_start, min(frame, len(self._samples)))
-            self._dragging = "end"
-        self.loop_changed.emit(self._loop_start, self._loop_end)
+
+        if ctrl:
+            if event.button() == Qt.LeftButton:
+                self._trim_start = max(0, min(frame, self._trim_end))
+                self._dragging = "trim_start"
+            elif event.button() == Qt.RightButton:
+                self._trim_end = max(self._trim_start, min(frame, len(self._samples)))
+                self._dragging = "trim_end"
+            self.trim_changed.emit(self._trim_start, self._trim_end)
+        else:
+            if event.button() == Qt.LeftButton:
+                self._loop_start = max(0, min(frame, self._loop_end))
+                self._dragging = "loop_start"
+            elif event.button() == Qt.RightButton:
+                self._loop_end = max(self._loop_start, min(frame, len(self._samples)))
+                self._dragging = "loop_end"
+            self.loop_changed.emit(self._loop_start, self._loop_end)
         self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
@@ -246,21 +295,31 @@ class WaveformView(QWidget):
         x = int(event.position().x())
 
         if self._editable:
-            handle = self._nearby_loop_handle(x)
+            handle = self._nearby_handle(x)
             if handle is not None and self._dragging is None:
                 self.setCursor(QCursor(Qt.SizeHorCursor))
             elif self._dragging is None:
                 self.unsetCursor()
 
-        if self._dragging == "start":
+        if self._dragging == "loop_start":
             frame = max(0, min(self._loop_end, self.frame_at_x(x)))
             self._loop_start = frame
             self.loop_changed.emit(self._loop_start, self._loop_end)
             self.update()
-        elif self._dragging == "end":
+        elif self._dragging == "loop_end":
             frame = max(self._loop_start, min(len(self._samples), self.frame_at_x(x)))
             self._loop_end = frame
             self.loop_changed.emit(self._loop_start, self._loop_end)
+            self.update()
+        elif self._dragging == "trim_start":
+            frame = max(0, min(self._trim_end, self.frame_at_x(x)))
+            self._trim_start = frame
+            self.trim_changed.emit(self._trim_start, self._trim_end)
+            self.update()
+        elif self._dragging == "trim_end":
+            frame = max(self._trim_start, min(len(self._samples), self.frame_at_x(x)))
+            self._trim_end = frame
+            self.trim_changed.emit(self._trim_start, self._trim_end)
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
