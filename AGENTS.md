@@ -50,8 +50,9 @@ wavepack_maker/
 │       ├── main_window.py       # 主窗口、菜单、工程生命周期、导出
 │       ├── metadata_panel.py    # 身份证元数据表单
 │       ├── sample_list_panel.py # 已保留但当前主界面不再显示；音源管理通过 Zone 配置中的下拉框完成
-│       ├── zone_list_panel.py   # Zone 列表：增删/复制/导入音源，显示每个 Zone 的 Note/Vel/复音模式/校验状态
+│       ├── zone_list_panel.py   # Zone 列表：右键菜单/按钮增删复制，显示每个 Zone 的 Note/Vel/复音模式/校验状态
 │       ├── zone_editor.py       # Zone 配置面板：根音/范围/力度/ADSR/复音模式/flags/音源采样选择
+│       └── range_slider.py      # 双头范围滑块，用于 Zone 的 Note/Velocity 范围可视化编辑
 │       ├── waveform_view.py     # 波形绘制 + 循环区间鼠标框选
 │       └── piano_roll.py        # MIDI note 0-127 钢琴卷帘高亮
 ├── tests/test_wavepack_maker.py # 单元测试
@@ -76,9 +77,10 @@ GUI 编辑 → Project 模型 → .wpp JSON
 当前 GUI 以 **Zone** 为核心，符合 `.wavepack` 协议的设计哲学：一个 Zone 定义一个 `(note 范围, velocity 范围)`，并指定一个 WAV 作为音源。主界面分为：
 
 1. **左上：Zone 列表**——显示所有 Zone，列包含名称、音源采样、根音、Note 范围、Velocity 范围、复音模式、校验状态。
-2. **右上：Zone 配置**——选中某个 Zone 后，编辑其 Note/Velocity 范围、根音、ADSR、复音模式，并选择该 Zone 使用的 WAV 音源。
+2. **右上：Zone 配置**——选中某个 Zone 后，编辑其 Note/Velocity 范围（双头滑块）、根音、ADSR、复音模式，并选择该 Zone 使用的 WAV 音源。
 3. **中下：波形预览**——显示当前 Zone 所选 WAV 的波形，并支持鼠标框选 loop 区间。
 4. **底部：钢琴键**——高度较矮，高亮当前 Zone 的 note 范围；点击钢琴键可在当前 Zone 音域内试听对应音源。
+5. **新建工程**——首次创建工程后自动弹出「工程属性」对话框，要求先完成音色名称、采样率等基础设置。
 
 > 说明：底层 `.wavepack` 格式中 Zone 与 Sample 解耦，多个 Zone 可引用同一个 Sample；上位机 UI 仍允许这种复用，只需在多个 Zone 中指定同一音源即可。工程身份证元数据通过菜单「文件 → 工程属性」编辑，不再常驻主界面。
 

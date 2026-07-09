@@ -18,6 +18,13 @@ from PySide6.QtWidgets import (
 )
 
 from ..models import Project, SampleEntry, ZoneEntry
+from .range_slider import RangeSlider
+
+
+def _note_name(note: int) -> str:
+    """返回 MIDI note 的音名，如 60 -> 'C4'。"""
+    names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    return f"{names[note % 12]}{note // 12 - 1}"
 
 
 class ZoneEditor(QGroupBox):
@@ -44,25 +51,27 @@ class ZoneEditor(QGroupBox):
         self._sample_combo = QComboBox()
         self._sample_combo.currentIndexChanged.connect(self._on_sample_changed)
 
+        # 根音
         self._root_spin = QSpinBox()
         self._root_spin.setRange(0, 127)
+        self._root_spin.setToolTip("该 Zone 音源采样的原始 MIDI 音高；旋律模式下用于计算 pitch shift")
         self._root_spin.valueChanged.connect(self._on_root_changed)
 
-        self._min_note_spin = QSpinBox()
-        self._min_note_spin.setRange(0, 127)
-        self._min_note_spin.valueChanged.connect(self._on_min_note_changed)
+        # Note 范围：双头滑块 + 标签
+        self._note_range_slider = RangeSlider(0, 127)
+        self._note_range_slider.range_changed.connect(self._on_note_range_changed)
+        self._note_range_label = QLabel("-")
+        note_range_layout = QVBoxLayout()
+        note_range_layout.addWidget(self._note_range_slider)
+        note_range_layout.addWidget(self._note_range_label)
 
-        self._max_note_spin = QSpinBox()
-        self._max_note_spin.setRange(0, 127)
-        self._max_note_spin.valueChanged.connect(self._on_max_note_changed)
-
-        self._min_vel_spin = QSpinBox()
-        self._min_vel_spin.setRange(0, 127)
-        self._min_vel_spin.valueChanged.connect(self._on_min_vel_changed)
-
-        self._max_vel_spin = QSpinBox()
-        self._max_vel_spin.setRange(0, 127)
-        self._max_vel_spin.valueChanged.connect(self._on_max_vel_changed)
+        # Velocity 范围：双头滑块 + 标签
+        self._vel_range_slider = RangeSlider(0, 127)
+        self._vel_range_slider.range_changed.connect(self._on_vel_range_changed)
+        self._vel_range_label = QLabel("-")
+        vel_range_layout = QVBoxLayout()
+        vel_range_layout.addWidget(self._vel_range_slider)
+        vel_range_layout.addWidget(self._vel_range_label)
 
         self._poly_mode_combo = QComboBox()
         self._poly_mode_combo.addItems(["retrigger", "multi", "legato"])
@@ -116,10 +125,8 @@ class ZoneEditor(QGroupBox):
         form.addRow("名称:", self._name_edit)
         form.addRow("音源采样:", self._sample_combo)
         form.addRow("根音 (Root):", self._root_spin)
-        form.addRow("最低 Note:", self._min_note_spin)
-        form.addRow("最高 Note:", self._max_note_spin)
-        form.addRow("最小 Velocity:", self._min_vel_spin)
-        form.addRow("最大 Velocity:", self._max_vel_spin)
+        form.addRow("Note 范围:", note_range_layout)
+        form.addRow("Velocity 范围:", vel_range_layout)
         form.addRow("复音模式:", self._poly_mode_combo)
         form.addRow("同音最大 Voice:", self._max_same_spin)
         form.addRow("音高微调 (cents):", self._pitch_spin)
@@ -157,10 +164,8 @@ class ZoneEditor(QGroupBox):
         if index >= 0:
             self._sample_combo.setCurrentIndex(index)
         self._root_spin.setValue(zone.root_note)
-        self._min_note_spin.setValue(zone.min_note)
-        self._max_note_spin.setValue(zone.max_note)
-        self._min_vel_spin.setValue(zone.min_vel)
-        self._max_vel_spin.setValue(zone.max_vel)
+        self._note_range_slider.set_range(zone.min_note, zone.max_note)
+        self._vel_range_slider.set_range(zone.min_vel, zone.max_vel)
         self._poly_mode_combo.setCurrentText(zone.poly_mode)
         self._max_same_spin.setValue(zone.max_same_note_voices)
         self._pitch_spin.setValue(zone.pitch_cents)
@@ -169,6 +174,7 @@ class ZoneEditor(QGroupBox):
         self._sustain_slider.setValue(zone.adsr[2])
         self._sustain_label.setText(str(zone.adsr[2]))
         self._release_spin.setValue(zone.adsr[3])
+        self._update_range_labels()
         self.blockSignals(False)
 
         self._update_flags_and_validation()
@@ -208,54 +214,22 @@ class ZoneEditor(QGroupBox):
         self._zone.root_note = value
         self._on_field_changed()
 
-    def _on_min_note_changed(self, value: int) -> None:
+    def _on_note_range_changed(self, low: int, high: int) -> None:
         if self._zone is None:
             return
-        # 保证 min <= max
-        if value > self._zone.max_note:
-            self._max_note_spin.blockSignals(True)
-            self._max_note_spin.setValue(value)
-            self._max_note_spin.blockSignals(False)
-            self._zone.max_note = value
-        self._zone.min_note = value
+        self._zone.min_note = low
+        self._zone.max_note = high
         # 根音同步到范围内
         self._clamp_root()
+        self._update_range_labels()
         self._on_field_changed()
 
-    def _on_max_note_changed(self, value: int) -> None:
+    def _on_vel_range_changed(self, low: int, high: int) -> None:
         if self._zone is None:
             return
-        # 保证 max >= min
-        if value < self._zone.min_note:
-            self._min_note_spin.blockSignals(True)
-            self._min_note_spin.setValue(value)
-            self._min_note_spin.blockSignals(False)
-            self._zone.min_note = value
-        self._zone.max_note = value
-        # 根音同步到范围内
-        self._clamp_root()
-        self._on_field_changed()
-
-    def _on_min_vel_changed(self, value: int) -> None:
-        if self._zone is None:
-            return
-        if value > self._zone.max_vel:
-            self._max_vel_spin.blockSignals(True)
-            self._max_vel_spin.setValue(value)
-            self._max_vel_spin.blockSignals(False)
-            self._zone.max_vel = value
-        self._zone.min_vel = value
-        self._on_field_changed()
-
-    def _on_max_vel_changed(self, value: int) -> None:
-        if self._zone is None:
-            return
-        if value < self._zone.min_vel:
-            self._min_vel_spin.blockSignals(True)
-            self._min_vel_spin.setValue(value)
-            self._min_vel_spin.blockSignals(False)
-            self._zone.min_vel = value
-        self._zone.max_vel = value
+        self._zone.min_vel = low
+        self._zone.max_vel = high
+        self._update_range_labels()
         self._on_field_changed()
 
     def _clamp_root(self) -> None:
@@ -268,6 +242,15 @@ class ZoneEditor(QGroupBox):
             self._root_spin.setValue(new_root)
             self._root_spin.blockSignals(False)
             self._zone.root_note = new_root
+
+    def _update_range_labels(self) -> None:
+        if self._zone is None:
+            return
+        self._note_range_label.setText(
+            f"{_note_name(self._zone.min_note)} ({self._zone.min_note}) "
+            f"~ {_note_name(self._zone.max_note)} ({self._zone.max_note})"
+        )
+        self._vel_range_label.setText(f"{self._zone.min_vel} ~ {self._zone.max_vel}")
 
     def _on_sustain_changed(self, value: int) -> None:
         self._sustain_label.setText(str(value))

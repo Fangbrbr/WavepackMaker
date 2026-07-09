@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QLineEdit,
+    QMenu,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -40,23 +42,24 @@ class ZoneListPanel(QGroupBox):
         self._table.setHorizontalHeaderLabels(["名称", "音源采样", "根音", "Note 范围", "Vel 范围", "模式", "校验"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setFocusPolicy(Qt.NoFocus)  # 默认不显示焦点光标
         for col in range(7):
             self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.itemSelectionChanged.connect(self._emit_selection)
+        self._table.itemChanged.connect(self._on_item_changed)
+        self._table.doubleClicked.connect(self._on_double_click)
+        self._table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
         layout.addWidget(self._table)
 
         btn_layout = QHBoxLayout()
-        self._import_btn = QPushButton("导入 WAV")
-        self._import_btn.setToolTip("导入一个或多个 WAV 文件作为可选音源")
-        self._import_btn.clicked.connect(self._on_import_wav)
         self._add_btn = QPushButton("添加 Zone")
         self._add_btn.clicked.connect(self._on_add)
         self._remove_btn = QPushButton("删除")
         self._remove_btn.clicked.connect(self._on_remove)
         self._duplicate_btn = QPushButton("复制")
         self._duplicate_btn.clicked.connect(self._on_duplicate)
-        btn_layout.addWidget(self._import_btn)
         btn_layout.addWidget(self._add_btn)
         btn_layout.addWidget(self._remove_btn)
         btn_layout.addWidget(self._duplicate_btn)
@@ -89,6 +92,7 @@ class ZoneListPanel(QGroupBox):
             self._table.insertRow(row)
             name_item = QTableWidgetItem(zone.name or f"Zone {row + 1}")
             name_item.setData(Qt.UserRole, zone.id)
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)  # 默认不可编辑
             self._table.setItem(row, 0, name_item)
 
             sample = self._get_sample(zone.sample_id)
@@ -135,6 +139,49 @@ class ZoneListPanel(QGroupBox):
         if self._on_selection_changed:
             self._on_selection_changed(self.selected_zone())
 
+    def _on_context_menu(self, pos) -> None:
+        if self._project is None:
+            return
+        menu = QMenu(self)
+        add_action = menu.addAction("新建 Zone")
+        duplicate_action = menu.addAction("复制 Zone")
+        delete_action = menu.addAction("删除 Zone")
+
+        # 只有点击到有效行时才启用复制/删除
+        item = self._table.itemAt(pos)
+        has_selection = item is not None
+        duplicate_action.setEnabled(has_selection)
+        delete_action.setEnabled(has_selection)
+
+        action = menu.exec(self._table.viewport().mapToGlobal(pos))
+        if action == add_action:
+            self._on_add()
+        elif action == duplicate_action:
+            self._on_duplicate()
+        elif action == delete_action:
+            self._on_remove()
+
+    def _on_double_click(self, index) -> None:
+        """双击名称列进入编辑模式。"""
+        if index.column() != 0:
+            return
+        row = index.row()
+        self._table.editItem(self._table.item(row, 0))
+
+    def _on_item_changed(self, item: QTableWidgetItem) -> None:
+        """列表项编辑完成后同步到 Zone 名称。"""
+        if item.column() != 0 or self._project is None:
+            return
+        zone_id = item.data(Qt.UserRole)
+        zone = self._project.get_zone(zone_id)
+        if zone is None:
+            return
+        new_name = item.text().strip()
+        if new_name and new_name != zone.name:
+            zone.name = new_name
+            if self._on_selection_changed:
+                self._on_selection_changed(zone)
+
     def _on_import_wav(self) -> None:
         if self._project is None:
             return
@@ -150,24 +197,44 @@ class ZoneListPanel(QGroupBox):
             except Exception as e:
                 QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
         if imported and self._on_selection_changed:
-            # 导入音源后保持当前 Zone 选中，不切换
             self.refresh()
             self._emit_selection()
+
+    def _next_note_range(self) -> tuple[int, int, int]:
+        """计算新建 Zone 的默认 note 范围与根音：接在上一个 Zone 后面，默认两个八度。"""
+        if not self._project or not self._project.zones:
+            root = 60
+            min_note = max(0, root - 12)
+            max_note = min(127, root + 12)
+            return root, min_note, max_note
+
+        last_max = max(z.max_note for z in self._project.zones)
+        min_note = min(127, last_max + 1)
+        max_note = min(127, min_note + 24)
+        # 如果空间不足，从 0 开始
+        if min_note > 127 - 12:
+            min_note = 0
+            max_note = 24
+        root = min(127, min_note + 12)
+        return root, min_note, max_note
 
     def _on_add(self) -> None:
         if self._project is None:
             return
         if not self._project.samples:
-            QMessageBox.information(self, "提示", "请先导入 WAV 音源")
+            QMessageBox.information(self, "提示", "请先导入 WAV 音源（通过文件菜单或直接把 WAV 放入工程目录）")
             return
 
+        root, min_note, max_note = self._next_note_range()
         sample = self._project.samples[-1]
         zone = ZoneEntry(
             sample_id=sample.id,
             name=f"Zone {len(self._project.zones) + 1}",
-            root_note=sample.root_note,
-            min_note=max(0, sample.root_note - 6),
-            max_note=min(127, sample.root_note + 6),
+            root_note=root,
+            min_note=min_note,
+            max_note=max_note,
+            min_vel=0,
+            max_vel=127,
         )
         self._project.add_zone(zone)
         self.refresh()

@@ -75,6 +75,10 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        self._import_sample_action = QAction("导入 WAV 音源(&I)...", self)
+        self._import_sample_action.triggered.connect(self._import_wav_samples)
+        file_menu.addAction(self._import_sample_action)
+
         self._export_action = QAction("导出 .wavepack(&E)...", self)
         self._export_action.triggered.connect(self._export_wavepack)
         file_menu.addAction(self._export_action)
@@ -169,6 +173,8 @@ class MainWindow(QMainWindow):
         self._bind_project()
         self._update_title()
         self._update_status()
+        # 新建工程后弹出工程属性，让用户先完成第一次设置
+        self._edit_properties()
 
     def _open_project(self) -> None:
         if not self._maybe_save_dirty():
@@ -277,6 +283,26 @@ class MainWindow(QMainWindow):
         else:
             self._waveform_view.clear()
         self._update_piano_roll()
+
+    def _import_wav_samples(self) -> None:
+        """通过文件菜单导入 WAV 音源到工程（供 Zone 选择使用）。"""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "导入 WAV 音源", "", "WAV 文件 (*.wav)"
+        )
+        if not paths:
+            return
+        for path in paths:
+            try:
+                sample = SampleEntry.from_wav(path)
+                self._project.add_sample(sample)
+            except Exception as e:
+                QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
+        # 刷新 Zone 列表的音源下拉框
+        self._zone_list_panel.refresh()
+        zone = self._zone_list_panel.selected_zone()
+        if zone is not None:
+            self._zone_editor.set_zone(zone)
+        self._update_status()
 
     def _on_zone_edited(self) -> None:
         # Zone 参数变更后刷新列表中的汇总列
