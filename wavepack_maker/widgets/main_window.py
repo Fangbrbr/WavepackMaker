@@ -207,6 +207,7 @@ class MainWindow(QMainWindow):
         bottom_layout.setSpacing(4)
 
         self._waveform_view = WaveformView()
+        self._waveform_view.loop_changed.connect(self._on_loop_changed)
         bottom_layout.addWidget(self._waveform_view, stretch=1)
 
         self._piano_roll = PianoRoll()
@@ -368,7 +369,15 @@ class MainWindow(QMainWindow):
 
     def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
         self._zone_editor.set_zone(zone)
-        # Zone 选中时同步更新钢琴键高亮；波形由采样清单控制
+        if zone is not None:
+            sample = self._project.get_sample(zone.sample_id)
+            if sample is not None:
+                self._waveform_view.load_wav(sample.resolve_path())
+                self._sample_panel.select_sample(sample.id)
+            else:
+                self._waveform_view.clear()
+        else:
+            self._waveform_view.clear()
         self._update_piano_roll()
 
     def _import_wav_samples(self) -> None:
@@ -433,16 +442,22 @@ class MainWindow(QMainWindow):
         if path.is_file():
             self._audio_player.play(path)
 
-    def _on_apply_loop(self, start: int, end: int) -> None:
-        # 实际区间从波形视图读取
-        start, end = self._waveform_view.get_loop_region()
+    def _on_loop_changed(self, start: int, end: int) -> None:
+        """波形视图拖动循环光标时，同步到当前 Zone 的采样。"""
         zone = self._zone_list_panel.selected_zone()
-        if zone is not None:
-            sample = self._project.get_sample(zone.sample_id)
-            if sample is not None:
-                sample.loop_start = start
-                sample.loop_end = end
-                self._status_label.setText(f"已设置循环: {start} ~ {end}")
+        if zone is None:
+            return
+        sample = self._project.get_sample(zone.sample_id)
+        if sample is None:
+            return
+        sample.loop_start = start
+        sample.loop_end = end
+        self._status_label.setText(f"循环区间: {start} ~ {end}")
+
+    def _on_apply_loop(self, start: int, end: int) -> None:
+        """应用循环区间按钮：将波形视图当前框选区间写入采样。"""
+        start, end = self._waveform_view.get_loop_region()
+        self._on_loop_changed(start, end)
 
     def _update_piano_roll(self) -> None:
         zone = self._zone_editor._zone
