@@ -1,4 +1,4 @@
-"""Zone 参数编辑器。"""
+"""采样配置编辑器（底层对应一个 Zone）。"""
 
 from typing import Callable, List, Optional
 
@@ -21,10 +21,10 @@ from ..models import Project, SampleEntry, ZoneEntry
 
 
 class ZoneEditor(QGroupBox):
-    """编辑单个 Zone 的所有参数。"""
+    """编辑单个采样对应的 Zone 参数。"""
 
     def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__("Zone 编辑器", parent)
+        super().__init__("采样配置", parent)
         self._project: Optional[Project] = None
         self._zone: Optional[ZoneEntry] = None
         self._on_changed: Optional[Callable[[], None]] = None
@@ -41,8 +41,7 @@ class ZoneEditor(QGroupBox):
         self._name_edit = QLineEdit()
         self._name_edit.textChanged.connect(self._on_field_changed)
 
-        self._sample_combo = QComboBox()
-        self._sample_combo.currentIndexChanged.connect(self._on_sample_changed)
+        self._sample_label = QLabel("-")
 
         self._root_spin = QSpinBox()
         self._root_spin.setRange(0, 127)
@@ -114,7 +113,7 @@ class ZoneEditor(QGroupBox):
         self._validation_label.setWordWrap(True)
 
         form.addRow("名称:", self._name_edit)
-        form.addRow("采样:", self._sample_combo)
+        form.addRow("关联采样:", self._sample_label)
         form.addRow("根音 (Root):", self._root_spin)
         form.addRow("最低 Note:", self._min_note_spin)
         form.addRow("最高 Note:", self._max_note_spin)
@@ -133,7 +132,7 @@ class ZoneEditor(QGroupBox):
         self._play_btn = QPushButton("▶ 播放采样")
         self._play_btn.clicked.connect(self._on_play_clicked)
         self._loop_btn = QPushButton("应用循环区间")
-        self._loop_btn.setToolTip("将波形视图中框选的区间设为该 Zone 的 loop 范围")
+        self._loop_btn.setToolTip("将波形视图中框选的区间设为该采样的 loop 范围")
         self._loop_btn.clicked.connect(self._on_loop_clicked)
         btn_layout.addWidget(self._play_btn)
         btn_layout.addWidget(self._loop_btn)
@@ -142,20 +141,18 @@ class ZoneEditor(QGroupBox):
 
     def set_project(self, project: Project) -> None:
         self._project = project
-        self._refresh_sample_combo()
 
     def set_zone(self, zone: Optional[ZoneEntry]) -> None:
         self._zone = zone
         self.setEnabled(zone is not None)
         if zone is None:
+            self._sample_label.setText("-")
             return
 
         self.blockSignals(True)
         self._name_edit.setText(zone.name)
-        self._refresh_sample_combo()
-        index = self._sample_combo.findData(zone.sample_id)
-        if index >= 0:
-            self._sample_combo.setCurrentIndex(index)
+        sample = self._project.get_sample(zone.sample_id) if self._project else None
+        self._sample_label.setText(sample.name if sample else "-")
         self._root_spin.setValue(zone.root_note)
         self._min_note_spin.setValue(zone.min_note)
         self._max_note_spin.setValue(zone.max_note)
@@ -181,21 +178,6 @@ class ZoneEditor(QGroupBox):
 
     def set_on_set_loop(self, callback: Callable[[int, int], None]) -> None:
         self._on_set_loop = callback
-
-    def _refresh_sample_combo(self) -> None:
-        self._sample_combo.clear()
-        if self._project is None:
-            return
-        for sample in self._project.samples:
-            self._sample_combo.addItem(sample.name, sample.id)
-
-    def _on_sample_changed(self) -> None:
-        if self._zone is None:
-            return
-        sample_id = self._sample_combo.currentData()
-        if sample_id:
-            self._zone.sample_id = sample_id
-        self._on_field_changed()
 
     def _on_sustain_changed(self, value: int) -> None:
         self._sustain_label.setText(str(value))
@@ -232,11 +214,10 @@ class ZoneEditor(QGroupBox):
         errs = self._zone.validate()
         if errs:
             self._validation_label.setText("\n".join(errs))
+            self._validation_label.setStyleSheet("color: red;")
         else:
             self._validation_label.setText("OK")
             self._validation_label.setStyleSheet("color: green;")
-            return
-        self._validation_label.setStyleSheet("color: red;")
 
     def _on_play_clicked(self) -> None:
         if self._zone is None or self._project is None or self._on_play is None:

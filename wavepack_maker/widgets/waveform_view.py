@@ -21,7 +21,7 @@ class WaveformView(QWidget):
         self._loop_end: int = 0
         self._selection_start: Optional[int] = None
         self._selection_end: Optional[int] = None
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(180)
         self.setAutoFillBackground(True)
         pal = self.palette()
         pal.setColor(self.backgroundRole(), QColor(245, 245, 245))

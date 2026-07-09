@@ -352,6 +352,29 @@ class Project:
                 return z
         return None
 
+    def get_zone_for_sample(self, sample_id: str) -> Optional[ZoneEntry]:
+        """返回与指定 Sample 关联的第一个 Zone；UI 上强制一个 Sample 对应一个 Zone。"""
+        for z in self.zones:
+            if z.sample_id == sample_id:
+                return z
+        return None
+
+    def ensure_zone_for_sample(self, sample: SampleEntry) -> ZoneEntry:
+        """确保指定 Sample 有对应的 Zone；不存在则自动创建默认 Zone。"""
+        zone = self.get_zone_for_sample(sample.id)
+        if zone is not None:
+            return zone
+        # 默认创建旋律 Zone，根音取 sample.root_note，音域向两侧扩展 6 个半音
+        zone = ZoneEntry(
+            sample_id=sample.id,
+            name=sample.name,
+            root_note=sample.root_note,
+            min_note=max(0, sample.root_note - 6),
+            max_note=min(127, sample.root_note + 6),
+        )
+        self.add_zone(zone)
+        return zone
+
     def validate(self) -> List[str]:
         """返回工程级校验错误列表。"""
         errs: List[str] = []

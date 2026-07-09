@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..models import Project, SampleEntry
+from ..models import Project, SampleEntry, ZoneEntry
 
 
 class SampleListPanel(QGroupBox):
@@ -32,11 +32,22 @@ class SampleListPanel(QGroupBox):
         layout = QVBoxLayout(self)
 
         self._table = QTableWidget()
-        self._table.setColumnCount(5)
-        self._table.setHorizontalHeaderLabels(["名称", "路径", "采样率", "通道", "位深"])
+        self._table.setMinimumHeight(300)
+        self._table.setColumnCount(9)
+        self._table.setHorizontalHeaderLabels(
+            ["名称", "根音", "Note 范围", "Vel 范围", "复音模式", "同音 Voice", "采样率", "通道", "路径"]
+        )
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self._table.itemSelectionChanged.connect(self._emit_selection)
         layout.addWidget(self._table)
 
@@ -62,20 +73,51 @@ class SampleListPanel(QGroupBox):
     def set_on_selection_changed(self, callback: Callable[[Optional[SampleEntry]], None]) -> None:
         self._on_selection_changed = callback
 
+    def _get_zone(self, sample_id: str) -> Optional[ZoneEntry]:
+        if self._project is None:
+            return None
+        for zone in self._project.zones:
+            if zone.sample_id == sample_id:
+                return zone
+        return None
+
     def refresh(self) -> None:
+        selected_id = None
+        rows = self._table.selectionModel().selectedRows()
+        if rows:
+            item = self._table.item(rows[0].row(), 0)
+            if item is not None:
+                selected_id = item.data(Qt.UserRole)
+
         self._table.setRowCount(0)
         if self._project is None:
             return
         for sample in self._project.samples:
+            zone = self._get_zone(sample.id)
             row = self._table.rowCount()
             self._table.insertRow(row)
             name_item = QTableWidgetItem(sample.name)
             name_item.setData(Qt.UserRole, sample.id)
             self._table.setItem(row, 0, name_item)
-            self._table.setItem(row, 1, QTableWidgetItem(sample.file_path))
-            self._table.setItem(row, 2, QTableWidgetItem(str(sample.sample_rate)))
-            self._table.setItem(row, 3, QTableWidgetItem(str(sample.channels)))
-            self._table.setItem(row, 4, QTableWidgetItem(str(sample.bits)))
+            self._table.setItem(row, 1, QTableWidgetItem(str(sample.root_note)))
+            if zone is not None:
+                self._table.setItem(row, 2, QTableWidgetItem(f"{zone.min_note}-{zone.max_note}"))
+                self._table.setItem(row, 3, QTableWidgetItem(f"{zone.min_vel}-{zone.max_vel}"))
+                self._table.setItem(row, 4, QTableWidgetItem(zone.poly_mode))
+                self._table.setItem(row, 5, QTableWidgetItem(str(zone.max_same_note_voices)))
+            else:
+                self._table.setItem(row, 2, QTableWidgetItem("-"))
+                self._table.setItem(row, 3, QTableWidgetItem("-"))
+                self._table.setItem(row, 4, QTableWidgetItem("-"))
+                self._table.setItem(row, 5, QTableWidgetItem("-"))
+            self._table.setItem(row, 6, QTableWidgetItem(str(sample.sample_rate)))
+            self._table.setItem(row, 7, QTableWidgetItem(str(sample.channels)))
+            self._table.setItem(row, 8, QTableWidgetItem(sample.file_path))
+
+        if selected_id is not None:
+            self._table.blockSignals(True)
+            self.select_sample(selected_id)
+            self._table.blockSignals(False)
 
     def selected_sample(self) -> Optional[SampleEntry]:
         rows = self._table.selectionModel().selectedRows()
@@ -87,6 +129,13 @@ class SampleListPanel(QGroupBox):
             return None
         sample_id = item.data(Qt.UserRole)
         return self._project.get_sample(sample_id)
+
+    def select_sample(self, sample_id: str) -> None:
+        for row in range(self._table.rowCount()):
+            item = self._table.item(row, 0)
+            if item and item.data(Qt.UserRole) == sample_id:
+                self._table.selectRow(row)
+                break
 
     def _emit_selection(self) -> None:
         if self._on_selection_changed:
@@ -100,15 +149,19 @@ class SampleListPanel(QGroupBox):
         files, _ = QFileDialog.getOpenFileNames(
             self, "导入 WAV 采样", "", "WAV 文件 (*.wav)"
         )
+        imported_ids: List[str] = []
         for path in files:
             try:
                 sample = SampleEntry.from_wav(path)
                 self._project.add_sample(sample)
+                imported_ids.append(sample.id)
             except Exception as e:
                 from PySide6.QtWidgets import QMessageBox
                 QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
         self.refresh()
-        self._emit_selection()
+        if imported_ids:
+            self.select_sample(imported_ids[-1])
+            self._emit_selection()
 
     def _on_remove(self) -> None:
         sample = self.selected_sample()

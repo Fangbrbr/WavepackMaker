@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Tuple
 
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QRect, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QMouseEvent, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -13,12 +13,15 @@ class PianoRoll(QWidget):
     # 0=C, 1=C#, 2=D, 3=D#, 4=E, 5=F, 6=F#, 7=G, 8=G#, 9=A, 10=A#, 11=B
     BLACK_KEYS = {1, 3, 6, 8, 10}
 
+    note_clicked = Signal(int)
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self._ranges: List[Tuple[int, int]] = []  # (min_note, max_note)
         self._root_notes: List[int] = []
         self._hover_note: Optional[int] = None
-        self.setMinimumHeight(60)
+        self.setMinimumHeight(40)
+        self.setMaximumHeight(90)
         self.setFont(QFont("Microsoft YaHei", 8))
 
     def set_highlight(self, ranges: List[Tuple[int, int]], root_notes: List[int]) -> None:
@@ -95,4 +98,5 @@ class PianoRoll(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         note = self.note_at_x(int(event.position().x()))
-        # 可扩展：点击发出信号供外部设置 root_note
+        if 0 <= note < 128:
+            self.note_clicked.emit(note)

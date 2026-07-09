@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -27,7 +28,6 @@ from .piano_roll import PianoRoll
 from .sample_list_panel import SampleListPanel
 from .waveform_view import WaveformView
 from .zone_editor import ZoneEditor
-from .zone_list_panel import ZoneListPanel
 
 
 class MainWindow(QMainWindow):
@@ -36,12 +36,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("WavePack Maker")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(1400, 900)
 
         self._project = Project()
         self._project_file_path: Optional[str] = None
         self._last_save_state: Optional[dict] = None
         self._audio_player = AudioPlayer()
+        self._ignore_dirty_once = True  # 首次新建工程不弹保存询问
 
         self._setup_menu()
         self._setup_central()
@@ -84,6 +85,10 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        self._properties_action = QAction("工程属性(&P)...", self)
+        self._properties_action.triggered.connect(self._edit_properties)
+        file_menu.addAction(self._properties_action)
+
         self._exit_action = QAction("退出(&X)", self)
         self._exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         self._exit_action.triggered.connect(self.close)
@@ -100,56 +105,52 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(8, 8, 8, 8)
 
-        splitter = QSplitter(Qt.Vertical)
-        main_layout.addWidget(splitter)
+        main_splitter = QSplitter(Qt.Vertical)
+        main_layout.addWidget(main_splitter)
 
-        # 上方面板：元数据 + Zone 编辑器 + 列表
+        # 上方面板：采样列表 | 采样配置
         top_widget = QWidget()
         top_layout = QHBoxLayout(top_widget)
         top_layout.setContentsMargins(0, 0, 0, 0)
 
-        left_splitter = QSplitter(Qt.Horizontal)
-        top_layout.addWidget(left_splitter)
+        top_splitter = QSplitter(Qt.Horizontal)
+        top_layout.addWidget(top_splitter)
 
-        # 左侧：Sample 列表 + Zone 列表
-        list_widget = QWidget()
-        list_layout = QVBoxLayout(list_widget)
-        list_layout.setContentsMargins(0, 0, 0, 0)
         self._sample_panel = SampleListPanel()
         self._sample_panel.set_on_selection_changed(self._on_sample_selected)
-        list_layout.addWidget(self._sample_panel)
-        self._zone_list_panel = ZoneListPanel()
-        self._zone_list_panel.set_on_selection_changed(self._on_zone_selected)
-        list_layout.addWidget(self._zone_list_panel)
-        left_splitter.addWidget(list_widget)
+        top_splitter.addWidget(self._sample_panel)
 
-        # 中间：元数据
-        self._metadata_panel = MetadataPanel()
-        left_splitter.addWidget(self._metadata_panel)
-
-        # 右侧：Zone 编辑器
         self._zone_editor = ZoneEditor()
         self._zone_editor.set_on_changed(self._on_zone_edited)
         self._zone_editor.set_on_play(self._on_play_sample)
         self._zone_editor.set_on_set_loop(self._on_apply_loop)
-        left_splitter.addWidget(self._zone_editor)
+        top_splitter.addWidget(self._zone_editor)
 
-        left_splitter.setSizes([300, 350, 450])
-        splitter.addWidget(top_widget)
+        # 列表占更大空间，方便管理大量 WAV
+        top_splitter.setSizes([850, 550])
+        top_splitter.setStretchFactor(0, 3)
+        top_splitter.setStretchFactor(1, 2)
 
-        # 下方：波形 + 钢琴卷帘
+        main_splitter.addWidget(top_widget)
+
+        # 下方面板：波形预览 + 钢琴键
         bottom_widget = QWidget()
         bottom_layout = QVBoxLayout(bottom_widget)
         bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(4)
 
         self._waveform_view = WaveformView()
-        bottom_layout.addWidget(self._waveform_view)
+        bottom_layout.addWidget(self._waveform_view, stretch=1)
 
         self._piano_roll = PianoRoll()
+        self._piano_roll.note_clicked.connect(self._on_piano_key_clicked)
         bottom_layout.addWidget(self._piano_roll)
 
-        splitter.addWidget(bottom_widget)
-        splitter.setSizes([500, 250])
+        main_splitter.addWidget(bottom_widget)
+        # 上方配置区域更大，下方波形 + 钢琴键占剩余空间
+        main_splitter.setSizes([520, 380])
+        main_splitter.setStretchFactor(0, 2)
+        main_splitter.setStretchFactor(1, 1)
 
     def _setup_statusbar(self) -> None:
         self._status_label = QLabel("就绪")
@@ -161,8 +162,11 @@ class MainWindow(QMainWindow):
     # 工程生命周期
     # ------------------------------------------------------------------
     def _new_project(self) -> None:
-        if not self._maybe_save_dirty():
+        if self._ignore_dirty_once:
+            self._ignore_dirty_once = False
+        elif not self._maybe_save_dirty():
             return
+
         self._project = Project(metadata=ProjectMetadata())
         self._project_file_path = None
         self._last_save_state = self._project.to_dict()
@@ -221,10 +225,9 @@ class MainWindow(QMainWindow):
             return False
 
     def _bind_project(self) -> None:
-        self._metadata_panel.set_metadata(self._project.metadata)
         self._sample_panel.set_project(self._project)
-        self._zone_list_panel.set_project(self._project)
         self._zone_editor.set_project(self._project)
+        self._zone_editor.set_zone(None)
         self._update_piano_roll()
         self._waveform_view.clear()
 
@@ -262,28 +265,28 @@ class MainWindow(QMainWindow):
             self._project_label.setText(Path(self._project_file_path).name)
         else:
             self._project_label.setText("未保存")
-        self._status_label.setText(f"采样: {n_samples}  Zone: {n_zones}")
+        self._status_label.setText(f"采样: {n_samples}")
         self._update_title()
 
     # ------------------------------------------------------------------
     # 交互回调
     # ------------------------------------------------------------------
     def _on_sample_selected(self, sample: Optional[SampleEntry]) -> None:
-        if sample is not None:
-            self._waveform_view.load_wav(sample.resolve_path())
-        else:
+        if sample is None:
+            self._zone_editor.set_zone(None)
             self._waveform_view.clear()
+            self._update_piano_roll()
+            return
 
-    def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
+        # 确保每个 Sample 都有对应的 Zone
+        zone = self._project.ensure_zone_for_sample(sample)
         self._zone_editor.set_zone(zone)
-        if zone is not None:
-            sample = self._project.get_sample(zone.sample_id)
-            if sample is not None:
-                self._waveform_view.load_wav(sample.resolve_path())
+        self._waveform_view.load_wav(sample.resolve_path())
         self._update_piano_roll()
 
     def _on_zone_edited(self) -> None:
-        self._zone_list_panel.refresh()
+        # Zone 参数变更后刷新列表中的汇总列
+        self._sample_panel.refresh()
         self._update_piano_roll()
         self._update_status()
 
@@ -295,24 +298,66 @@ class MainWindow(QMainWindow):
     def _on_apply_loop(self, start: int, end: int) -> None:
         # 实际区间从波形视图读取
         start, end = self._waveform_view.get_loop_region()
-        zone = self._zone_editor.selected_zone() if hasattr(self._zone_editor, "selected_zone") else None
-        # 更简单：更新当前 Zone 对应 Sample 的 loop
-        current_zone = self._zone_list_panel.selected_zone()
-        if current_zone is not None:
-            sample = self._project.get_sample(current_zone.sample_id)
-            if sample is not None:
-                sample.loop_start = start
-                sample.loop_end = end
-                self._status_label.setText(f"已设置循环: {start} ~ {end}")
+        sample = self._sample_panel.selected_sample()
+        if sample is not None:
+            sample.loop_start = start
+            sample.loop_end = end
+            self._status_label.setText(f"已设置循环: {start} ~ {end}")
 
     def _update_piano_roll(self) -> None:
-        zones = self._project.zones
-        ranges = [(z.min_note, z.max_note) for z in zones]
-        roots = [z.root_note for z in zones]
-        self._piano_roll.set_highlight(ranges, roots)
+        zone = self._zone_editor._zone
+        if zone is not None:
+            self._piano_roll.set_highlight([(zone.min_note, zone.max_note)], [zone.root_note])
+        else:
+            self._piano_roll.clear_highlight()
+
+    def _on_piano_key_clicked(self, note: int) -> None:
+        """点击钢琴键：若 note 在当前 Zone 范围内则播放对应采样。"""
+        zone = self._zone_editor._zone
+        if zone is None:
+            return
+        if not (zone.min_note <= note <= zone.max_note):
+            self._status_label.setText(f"Note {note} 不在当前采样音域内")
+            return
+        sample = self._project.get_sample(zone.sample_id)
+        if sample is not None:
+            path = sample.resolve_path()
+            if path.is_file():
+                self._audio_player.play(path)
+                self._status_label.setText(f"预览 Note {note}: {sample.name}")
 
     def _import_wav(self) -> None:
         self._sample_panel._on_import()
+
+    def _edit_properties(self) -> None:
+        """弹出工程属性对话框编辑身份证元数据。"""
+        from PySide6.QtWidgets import QDialogButtonBox
+
+        snapshot = self._project.metadata.to_dict()
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("工程属性")
+        dialog.setMinimumWidth(500)
+        layout = QVBoxLayout(dialog)
+
+        panel = MetadataPanel()
+        panel.set_metadata(self._project.metadata)
+        layout.addWidget(panel)
+
+        btns = QHBoxLayout()
+        btns.addStretch()
+        box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        box.accepted.connect(dialog.accept)
+        box.rejected.connect(dialog.reject)
+        btns.addWidget(box)
+        layout.addLayout(btns)
+
+        if dialog.exec() == QDialog.Accepted:
+            self._update_status()
+        else:
+            # 取消时恢复之前的元数据快照
+            self._project.metadata = ProjectMetadata.from_dict(snapshot)
+            self._update_status()
 
     def _export_wavepack(self) -> None:
         errs = self._project.validate()
