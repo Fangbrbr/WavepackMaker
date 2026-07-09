@@ -51,6 +51,7 @@ class ThemeManager:
         """返回应用到整个应用的 QSS。"""
         accent = self.accent.name()
         accent_light = self.accent_light.name()
+        accent_dark = self.accent_dark.name()
         bg = self.background.name()
         surface = self.surface.name()
         text = self.text.name()
