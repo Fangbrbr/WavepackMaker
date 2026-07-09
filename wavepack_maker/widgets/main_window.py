@@ -173,8 +173,8 @@ class MainWindow(QMainWindow):
         self._bind_project()
         self._update_title()
         self._update_status()
-        # 主窗口显示后再延迟弹出工程属性，避免界面未加载先弹窗
-        QTimer.singleShot(300, self._edit_properties)
+        # 主窗口显示后再延迟弹出新建工程对话框，避免界面未加载先弹窗
+        QTimer.singleShot(300, lambda: self._edit_properties(title="新建工程"))
 
     def _open_project(self) -> None:
         if not self._maybe_save_dirty():
@@ -348,14 +348,14 @@ class MainWindow(QMainWindow):
                 self._audio_player.play(path)
                 self._status_label.setText(f"预览 Note {note}: {sample.name}")
 
-    def _edit_properties(self) -> None:
+    def _edit_properties(self, title: str = "工程属性") -> None:
         """弹出工程属性对话框编辑身份证元数据。"""
         from PySide6.QtWidgets import QDialogButtonBox
 
         snapshot = self._project.metadata.to_dict()
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("工程属性")
+        dialog.setWindowTitle(title)
         dialog.setMinimumWidth(500)
         layout = QVBoxLayout(dialog)
 
