@@ -3,11 +3,14 @@
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGroupBox,
+    QHBoxLayout,
     QHeaderView,
+    QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,7 +21,10 @@ from ..models import Project, SampleEntry
 
 
 class SampleListPanel(QGroupBox):
-    """展示工程目录 samples/ 下的所有 WAV 音源，支持点击预览。"""
+    """展示工程目录 samples/ 下的所有 WAV 音源，支持点击预览、导入、删除。"""
+
+    import_requested = Signal()
+    delete_requested = Signal(SampleEntry)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("采样清单", parent)
@@ -36,19 +42,33 @@ class SampleListPanel(QGroupBox):
         self._table.setHorizontalHeaderLabels(["#", "名称"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setTextElideMode(Qt.ElideRight)
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.verticalHeader().setVisible(False)
         self._table.setFocusPolicy(Qt.NoFocus)
+        self._table.itemSelectionChanged.connect(self._emit_selection)
+        layout.addWidget(self._table)
+
+        btn_layout = QHBoxLayout()
+        self._import_btn = QPushButton("导入")
+        self._import_btn.clicked.connect(lambda: self.import_requested.emit())
+        self._remove_btn = QPushButton("删除")
+        self._remove_btn.clicked.connect(self._on_delete)
+        btn_layout.addWidget(self._import_btn)
+        btn_layout.addWidget(self._remove_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+
+    def set_theme(self, accent_color: str) -> None:
+        """应用主题色到选中高亮。"""
         self._table.setStyleSheet(
             "QTableWidget { gridline-color: transparent; border: none; }"
             "QTableWidget::item { border: none; outline: none; padding-left: 4px; }"
-            "QTableWidget::item:selected { background-color: #3a3a3a; color: #ffffff; }"
+            f"QTableWidget::item:selected {{ background-color: {accent_color}; color: #ffffff; }}"
             "QTableWidget::item:focus { border: none; outline: none; }"
         )
-        self._table.itemSelectionChanged.connect(self._emit_selection)
-        layout.addWidget(self._table)
 
     def set_project(self, project: Project) -> None:
         self._project = project
@@ -75,7 +95,6 @@ class SampleListPanel(QGroupBox):
 
             name_item = QTableWidgetItem(sample.name)
             name_item.setData(Qt.UserRole, sample.id)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             self._table.setItem(row, 1, name_item)
 
         if selected_id is not None:
@@ -100,6 +119,20 @@ class SampleListPanel(QGroupBox):
             if item and item.data(Qt.UserRole) == sample_id:
                 self._table.selectRow(row)
                 break
+
+    def _on_delete(self) -> None:
+        sample = self.selected_sample()
+        if sample is None or self._project is None:
+            return
+        reply = QMessageBox.question(
+            self,
+            "删除采样",
+            f"确定删除采样 \"{sample.name}\" 吗？\n这会同时删除工程目录下的 WAV 文件。",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self.delete_requested.emit(sample)
 
     def _emit_selection(self) -> None:
         if self._on_selection_changed:

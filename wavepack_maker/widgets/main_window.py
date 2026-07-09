@@ -49,6 +49,8 @@ class MainWindow(QMainWindow):
         self._last_save_state: Optional[dict] = None
         self._audio_player = AudioPlayer()
         self._ignore_dirty_once = True  # 首次新建工程不弹保存询问
+        self._piano_window: Optional[QWidget] = None
+        self._piano_roll_widget: Optional[PianoRoll] = None
 
         self._setup_menu()
         self._setup_toolbar()
@@ -151,6 +153,13 @@ class MainWindow(QMainWindow):
         import_btn.triggered.connect(self._import_wav_samples)
         toolbar.addAction(import_btn)
 
+        # 右侧：虚拟键盘
+        keyboard_btn = QAction(
+            self.style().standardIcon(QStyle.SP_MediaPlay), "虚拟键盘", self
+        )
+        keyboard_btn.triggered.connect(self._toggle_piano_keyboard)
+        toolbar.addAction(keyboard_btn)
+
         # 右侧：导出 wavepack（通过 stretch widget 靠右）
         export_btn = QAction(
             self.style().standardIcon(QStyle.SP_ArrowForward), "导出 .wavepack", self
@@ -180,6 +189,8 @@ class MainWindow(QMainWindow):
 
         self._sample_panel = SampleListPanel()
         self._sample_panel.set_on_selection_changed(self._on_sample_selected)
+        self._sample_panel.import_requested.connect(self._import_wav_samples)
+        self._sample_panel.delete_requested.connect(self._on_delete_sample)
         top_splitter.addWidget(self._sample_panel)
 
         self._zone_list_panel = ZoneListPanel()
@@ -200,22 +211,17 @@ class MainWindow(QMainWindow):
 
         main_splitter.addWidget(top_widget)
 
-        # 下方面板：波形预览 + 钢琴键
+        # 下方面板：波形预览
         bottom_widget = QWidget()
         bottom_layout = QVBoxLayout(bottom_widget)
         bottom_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_layout.setSpacing(4)
 
         self._waveform_view = WaveformView()
         self._waveform_view.loop_changed.connect(self._on_loop_changed)
         bottom_layout.addWidget(self._waveform_view, stretch=1)
 
-        self._piano_roll = PianoRoll()
-        self._piano_roll.note_clicked.connect(self._on_piano_key_clicked)
-        bottom_layout.addWidget(self._piano_roll)
-
         main_splitter.addWidget(bottom_widget)
-        # 上方配置区域更大，下方波形 + 钢琴键占剩余空间
+        # 上方配置区域更大，下方波形占剩余空间
         main_splitter.setSizes([520, 380])
         main_splitter.setStretchFactor(0, 2)
         main_splitter.setStretchFactor(1, 1)
@@ -230,8 +236,11 @@ class MainWindow(QMainWindow):
         """应用主题色到各子控件。"""
         self._theme = theme
         self._waveform_view.set_theme(theme)
-        self._piano_roll.set_theme(theme)
         self._zone_editor.set_theme(theme)
+        self._sample_panel.set_theme(theme.accent.name())
+        self._zone_list_panel.set_theme(theme.accent.name())
+        if self._piano_window is not None and self._piano_roll_widget is not None:
+            self._piano_roll_widget.set_theme(theme)
 
     # ------------------------------------------------------------------
     # 工程生命周期
@@ -361,11 +370,14 @@ class MainWindow(QMainWindow):
     # 交互回调
     # ------------------------------------------------------------------
     def _on_sample_selected(self, sample: Optional[SampleEntry]) -> None:
-        """点击采样清单时，在波形预览中显示该采样。"""
+        """点击采样清单时，在波形预览中显示该采样并允许编辑循环标记。"""
         if sample is not None:
             self._waveform_view.load_wav(sample.resolve_path())
+            self._waveform_view.set_loop_region(sample.loop_start, sample.loop_end)
+            self._waveform_view.set_editable(True)
         else:
             self._waveform_view.clear()
+            self._waveform_view.set_editable(False)
 
     def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
         self._zone_editor.set_zone(zone)
@@ -373,11 +385,15 @@ class MainWindow(QMainWindow):
             sample = self._project.get_sample(zone.sample_id)
             if sample is not None:
                 self._waveform_view.load_wav(sample.resolve_path())
+                self._waveform_view.set_loop_region(sample.loop_start, sample.loop_end)
+                self._waveform_view.set_editable(False)
                 self._sample_panel.select_sample(sample.id)
             else:
                 self._waveform_view.clear()
+                self._waveform_view.set_editable(False)
         else:
             self._waveform_view.clear()
+            self._waveform_view.set_editable(False)
         self._update_piano_roll()
 
     def _import_wav_samples(self) -> None:
@@ -398,16 +414,19 @@ class MainWindow(QMainWindow):
             return
 
         imported = 0
+        skipped = 0
         for path in paths:
             src = Path(path)
             dst = samples_dir / src.name
-            # 若目标已存在，生成唯一文件名
-            counter = 1
-            stem = src.stem
-            suffix = src.suffix
-            while dst.exists():
-                dst = samples_dir / f"{stem}_{counter}{suffix}"
-                counter += 1
+            # 若已存在同名文件，提示并跳过
+            if dst.exists():
+                QMessageBox.information(
+                    self,
+                    "采样已存在",
+                    f"文件 \"{src.name}\" 已经在工程中存在，已跳过。"
+                )
+                skipped += 1
+                continue
             try:
                 shutil.copy2(src, dst)
                 # 使用相对于工程目录的路径存储
@@ -429,7 +448,31 @@ class MainWindow(QMainWindow):
         zone = self._zone_list_panel.selected_zone()
         if zone is not None:
             self._zone_editor.set_zone(zone)
-        self._status_label.setText(f"已导入 {imported} 个 WAV 音源")
+        self._status_label.setText(f"已导入 {imported} 个，跳过 {skipped} 个")
+
+    def _on_delete_sample(self, sample: SampleEntry) -> None:
+        """删除采样：从工程中移除并删除 samples/ 目录下的真实文件。"""
+        if self._project is None:
+            return
+
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
+        wav_path = sample.resolve_path(project_dir)
+
+        # 删除工程模型中的采样及其引用的 Zone
+        self._project.remove_sample(sample.id)
+
+        # 删除真实文件
+        if wav_path.is_file():
+            try:
+                wav_path.unlink()
+            except Exception as e:
+                QMessageBox.warning(self, "删除文件失败", f"{wav_path}\n{e}")
+
+        self._sample_panel.refresh()
+        self._zone_list_panel.refresh()
+        self._zone_editor.set_zone(self._zone_list_panel.selected_zone())
+        self._update_status()
+        self._status_label.setText(f"已删除采样: {sample.name}")
 
     def _on_zone_edited(self) -> None:
         # Zone 参数变更后刷新列表中的汇总列
@@ -443,11 +486,8 @@ class MainWindow(QMainWindow):
             self._audio_player.play(path)
 
     def _on_loop_changed(self, start: int, end: int) -> None:
-        """波形视图拖动循环光标时，同步到当前 Zone 的采样。"""
-        zone = self._zone_list_panel.selected_zone()
-        if zone is None:
-            return
-        sample = self._project.get_sample(zone.sample_id)
+        """波形视图拖动循环光标时，同步到当前 WAV 采样。"""
+        sample = self._sample_panel.selected_sample()
         if sample is None:
             return
         sample.loop_start = start
@@ -461,10 +501,13 @@ class MainWindow(QMainWindow):
 
     def _update_piano_roll(self) -> None:
         zone = self._zone_editor._zone
+        widget = self._piano_roll_widget
+        if widget is None:
+            return
         if zone is not None:
-            self._piano_roll.set_highlight([(zone.min_note, zone.max_note)], [zone.root_note])
+            widget.set_highlight([(zone.min_note, zone.max_note)], [zone.root_note])
         else:
-            self._piano_roll.clear_highlight()
+            widget.clear_highlight()
 
     def _on_piano_key_clicked(self, note: int) -> None:
         """点击钢琴键：若 note 在当前 Zone 范围内则播放对应音源。"""
@@ -480,6 +523,30 @@ class MainWindow(QMainWindow):
             if path.is_file():
                 self._audio_player.play(path)
                 self._status_label.setText(f"预览 Note {note}: {sample.name}")
+
+    def _toggle_piano_keyboard(self) -> None:
+        """显示/隐藏悬浮虚拟键盘窗口。"""
+        if self._piano_window is None:
+            self._piano_window = QWidget(self, Qt.Tool | Qt.WindowStaysOnTopHint)
+            self._piano_window.setWindowTitle("虚拟键盘")
+            self._piano_window.setMinimumWidth(800)
+            self._piano_window.setMinimumHeight(120)
+            layout = QVBoxLayout(self._piano_window)
+            layout.setContentsMargins(4, 4, 4, 4)
+            self._piano_roll_widget = PianoRoll()
+            self._piano_roll_widget.set_theme(self._theme)
+            self._piano_roll_widget.note_clicked.connect(self._on_piano_key_clicked)
+            layout.addWidget(self._piano_roll_widget)
+            # 初始高亮当前 Zone
+            zone = self._zone_editor._zone
+            if zone is not None:
+                self._piano_roll_widget.set_highlight([(zone.min_note, zone.max_note)], [zone.root_note])
+            self._piano_window.show()
+        else:
+            if self._piano_window.isVisible():
+                self._piano_window.hide()
+            else:
+                self._piano_window.show()
 
     def _edit_properties(self, title: str = "工程属性") -> None:
         """弹出工程属性对话框编辑工程元数据。"""

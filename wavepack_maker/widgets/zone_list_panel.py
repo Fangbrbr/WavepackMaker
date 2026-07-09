@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
-    QLineEdit,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -42,34 +41,42 @@ class ZoneListPanel(QGroupBox):
         self._table.setHorizontalHeaderLabels(["名称", "音源采样", "根音", "Note 范围", "Vel 范围", "模式", "校验"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setTextElideMode(Qt.ElideRight)
-        self._table.setFocusPolicy(Qt.NoFocus)  # 默认不显示焦点光标
-        self._table.setStyleSheet(
-            "QTableWidget { gridline-color: transparent; border: none; }"
-            "QTableWidget::item { border: none; outline: none; padding-left: 4px; }"
-            "QTableWidget::item:selected { background-color: #3a3a3a; color: #ffffff; }"
-            "QTableWidget::item:focus { border: none; outline: none; }"
-        )
-        for col in range(7):
-            self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self._table.setFocusPolicy(Qt.NoFocus)
         self._table.itemSelectionChanged.connect(self._emit_selection)
         self._table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_context_menu)
+        for col in range(7):
+            self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         layout.addWidget(self._table)
 
         btn_layout = QHBoxLayout()
+        self._import_btn = QPushButton("导入 WAV")
+        self._import_btn.setToolTip("导入一个或多个 WAV 文件作为可选音源")
+        self._import_btn.clicked.connect(self._on_import_wav)
         self._add_btn = QPushButton("添加 Zone")
         self._add_btn.clicked.connect(self._on_add)
         self._remove_btn = QPushButton("删除")
         self._remove_btn.clicked.connect(self._on_remove)
         self._duplicate_btn = QPushButton("复制")
         self._duplicate_btn.clicked.connect(self._on_duplicate)
+        btn_layout.addWidget(self._import_btn)
         btn_layout.addWidget(self._add_btn)
         btn_layout.addWidget(self._remove_btn)
         btn_layout.addWidget(self._duplicate_btn)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
+
+    def set_theme(self, accent_color: str) -> None:
+        """应用主题色到选中高亮。"""
+        self._table.setStyleSheet(
+            "QTableWidget { gridline-color: transparent; border: none; }"
+            "QTableWidget::item { border: none; outline: none; padding-left: 4px; }"
+            f"QTableWidget::item:selected {{ background-color: {accent_color}; color: #ffffff; }}"
+            "QTableWidget::item:focus { border: none; outline: none; }"
+        )
 
     def set_project(self, project: Project) -> None:
         self._project = project
@@ -97,7 +104,6 @@ class ZoneListPanel(QGroupBox):
             self._table.insertRow(row)
             name_item = QTableWidgetItem(zone.name or f"Zone {row + 1}")
             name_item.setData(Qt.UserRole, zone.id)
-            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)  # 默认不可编辑
             self._table.setItem(row, 0, name_item)
 
             sample = self._get_sample(zone.sample_id)
@@ -152,7 +158,6 @@ class ZoneListPanel(QGroupBox):
         duplicate_action = menu.addAction("复制 Zone")
         delete_action = menu.addAction("删除 Zone")
 
-        # 只有点击到有效行时才启用复制/删除
         item = self._table.itemAt(pos)
         has_selection = item is not None
         duplicate_action.setEnabled(has_selection)
@@ -195,7 +200,6 @@ class ZoneListPanel(QGroupBox):
         last_max = max(z.max_note for z in self._project.zones)
         min_note = min(127, last_max + 1)
         max_note = min(127, min_note + 24)
-        # 如果空间不足，从 0 开始
         if min_note > 127 - 12:
             min_note = 0
             max_note = 24
@@ -206,7 +210,7 @@ class ZoneListPanel(QGroupBox):
         if self._project is None:
             return
         if not self._project.samples:
-            QMessageBox.information(self, "提示", "请先导入 WAV 音源（通过文件菜单或直接把 WAV 放入工程目录）")
+            QMessageBox.information(self, "提示", "请先导入 WAV 音源")
             return
 
         root, min_note, max_note = self._next_note_range()
