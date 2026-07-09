@@ -8,13 +8,17 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QSizePolicy,
+    QSpinBox,
     QSplitter,
     QStyle,
     QToolBar,
@@ -609,6 +613,32 @@ class MainWindow(QMainWindow):
             "<p>工程文件后缀: .wpp<br>"
             "输出文件后缀: .wavepack</p>",
         )
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        """未在输入控件内时，键盘按键直接触发 MIDI note 预览。"""
+        focus = self.focusWidget()
+        if isinstance(focus, (QLineEdit, QPlainTextEdit, QSpinBox, QComboBox)):
+            super().keyPressEvent(event)
+            return
+
+        key_to_note = {
+            # 低音八度
+            ord("Z"): 48, ord("S"): 49, ord("X"): 50, ord("D"): 51,
+            ord("C"): 52, ord("V"): 53, ord("G"): 54, ord("B"): 55,
+            ord("H"): 56, ord("N"): 57, ord("J"): 58, ord("M"): 59,
+            # 中音八度
+            ord("Q"): 60, ord("2"): 61, ord("W"): 62, ord("3"): 63,
+            ord("E"): 64, ord("R"): 65, ord("5"): 66, ord("T"): 67,
+            ord("6"): 68, ord("Y"): 69, ord("7"): 70, ord("U"): 71,
+            # 高音八度
+            ord("I"): 72, ord("9"): 73, ord("O"): 74, ord("0"): 75,
+            ord("P"): 76,
+        }
+        note = key_to_note.get(event.key())
+        if note is not None:
+            self._on_piano_key_clicked(note)
+        else:
+            super().keyPressEvent(event)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self._maybe_save_dirty():
