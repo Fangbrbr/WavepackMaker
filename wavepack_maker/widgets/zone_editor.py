@@ -37,14 +37,33 @@ class ZoneEditor(QGroupBox):
         self._on_changed: Optional[Callable[[], None]] = None
         self._on_play: Optional[Callable[[SampleEntry], None]] = None
         self._on_set_loop: Optional[Callable[[int, int], None]] = None
+        self._loading_zone = False
         self._setup_ui()
         # 初始不加载任何 Zone，但控件保持可用（避免显示为灰色禁用）
         self.set_zone(None)
 
     def set_theme(self, theme) -> None:
-        """应用主题色到范围滑块。"""
+        """应用主题色到范围滑块与 Sustain 滑块。"""
         self._note_range_slider.set_theme(theme)
         self._vel_range_slider.set_theme(theme)
+        accent = theme.accent.name()
+        self._sustain_slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 8px;
+                background: #666666;
+                border-radius: 4px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {accent};
+                border-radius: 4px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {accent};
+                width: 14px;
+                margin: -3px 0;
+                border-radius: 7px;
+            }}
+        """)
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -159,6 +178,7 @@ class ZoneEditor(QGroupBox):
 
     def set_zone(self, zone: Optional[ZoneEntry]) -> None:
         self._zone = zone
+        self._loading_zone = True
         if zone is None:
             # 清空表单但不禁用控件，避免灰色显示
             self.blockSignals(True)
@@ -178,10 +198,9 @@ class ZoneEditor(QGroupBox):
             self._flags_edit.clear()
             self._validation_label.clear()
             self._update_range_labels()
-            self.blockSignals(False)
+            self._loading_zone = False
             return
 
-        self.blockSignals(True)
         self._name_edit.setText(zone.name)
         self._refresh_sample_combo()
         index = self._sample_combo.findData(zone.sample_id)
@@ -199,9 +218,8 @@ class ZoneEditor(QGroupBox):
         self._sustain_label.setText(str(zone.adsr[2]))
         self._release_spin.setValue(zone.adsr[3])
         self._update_range_labels()
-        self.blockSignals(False)
-
         self._update_flags_and_validation()
+        self._loading_zone = False
 
     def set_on_changed(self, callback: Callable[[], None]) -> None:
         self._on_changed = callback
@@ -220,7 +238,7 @@ class ZoneEditor(QGroupBox):
             self._sample_combo.addItem(sample.name, sample.id)
 
     def _on_sample_changed(self) -> None:
-        if self._zone is None:
+        if self._zone is None or self._loading_zone:
             return
         sample_id = self._sample_combo.currentData()
         if sample_id:
@@ -228,7 +246,7 @@ class ZoneEditor(QGroupBox):
         self._on_field_changed()
 
     def _on_root_changed(self, value: int) -> None:
-        if self._zone is None:
+        if self._zone is None or self._loading_zone:
             return
         # 根音必须在 [min_note, max_note] 范围内
         value = max(self._zone.min_note, min(self._zone.max_note, value))
@@ -239,7 +257,7 @@ class ZoneEditor(QGroupBox):
         self._on_field_changed()
 
     def _on_note_range_changed(self, low: int, high: int) -> None:
-        if self._zone is None:
+        if self._zone is None or self._loading_zone:
             return
         self._zone.min_note = low
         self._zone.max_note = high
@@ -249,7 +267,7 @@ class ZoneEditor(QGroupBox):
         self._on_field_changed()
 
     def _on_vel_range_changed(self, low: int, high: int) -> None:
-        if self._zone is None:
+        if self._zone is None or self._loading_zone:
             return
         self._zone.min_vel = low
         self._zone.max_vel = high
@@ -257,8 +275,8 @@ class ZoneEditor(QGroupBox):
         self._on_field_changed()
 
     def _clamp_root(self) -> None:
-        """将根音限制到 [min_note, max_note] 范围内。"""
-        if self._zone is None:
+        """将根音限制到 [min_note, max_note] 范围内."""
+        if self._zone is None or self._loading_zone:
             return
         new_root = max(self._zone.min_note, min(self._zone.max_note, self._zone.root_note))
         if new_root != self._zone.root_note:
@@ -278,10 +296,12 @@ class ZoneEditor(QGroupBox):
 
     def _on_sustain_changed(self, value: int) -> None:
         self._sustain_label.setText(str(value))
+        if self._loading_zone:
+            return
         self._on_field_changed()
 
     def _on_field_changed(self) -> None:
-        if self._zone is None:
+        if self._zone is None or self._loading_zone:
             return
         self._zone.name = self._name_edit.text()
         self._zone.poly_mode = self._poly_mode_combo.currentText()

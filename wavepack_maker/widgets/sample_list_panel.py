@@ -78,28 +78,30 @@ class SampleListPanel(QGroupBox):
         self._on_selection_changed = callback
 
     def refresh(self) -> None:
-        selected_id = None
-        rows = self._table.selectionModel().selectedRows()
-        if rows:
-            item = self._table.item(rows[0].row(), 1)
-            if item is not None:
-                selected_id = item.data(Qt.UserRole)
+        self._table.blockSignals(True)
+        try:
+            selected_id = None
+            rows = self._table.selectionModel().selectedRows()
+            if rows:
+                item = self._table.item(rows[0].row(), 1)
+                if item is not None:
+                    selected_id = item.data(Qt.UserRole)
 
-        self._table.setRowCount(0)
-        if self._project is None:
-            return
-        for idx, sample in enumerate(self._project.samples, start=1):
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(str(idx)))
+            self._table.setRowCount(0)
+            if self._project is None:
+                return
+            for idx, sample in enumerate(self._project.samples, start=1):
+                row = self._table.rowCount()
+                self._table.insertRow(row)
+                self._table.setItem(row, 0, QTableWidgetItem(str(idx)))
 
-            name_item = QTableWidgetItem(sample.name)
-            name_item.setData(Qt.UserRole, sample.id)
-            self._table.setItem(row, 1, name_item)
+                name_item = QTableWidgetItem(sample.name)
+                name_item.setData(Qt.UserRole, sample.id)
+                self._table.setItem(row, 1, name_item)
 
-        if selected_id is not None:
-            self._table.blockSignals(True)
-            self.select_sample(selected_id)
+            if selected_id is not None:
+                self.select_sample(selected_id)
+        finally:
             self._table.blockSignals(False)
 
     def selected_sample(self) -> Optional[SampleEntry]:

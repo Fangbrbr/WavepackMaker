@@ -317,6 +317,8 @@ class MainWindow(QMainWindow):
             return False
 
     def _bind_project(self) -> None:
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
+        self._project.sync_samples_with_directory(project_dir)
         self._sample_panel.set_project(self._project)
         self._zone_list_panel.set_project(self._project)
         self._zone_editor.set_project(self._project)
@@ -379,8 +381,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _on_sample_selected(self, sample: Optional[SampleEntry]) -> None:
         """点击采样清单时，在波形预览中显示该采样并允许编辑循环标记。"""
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
         if sample is not None:
-            self._waveform_view.load_wav(sample.resolve_path())
+            self._waveform_view.load_wav(sample.resolve_path(project_dir))
             self._waveform_view.set_loop_region(sample.loop_start, sample.loop_end)
             self._waveform_view.set_editable(True)
         else:
@@ -388,11 +391,12 @@ class MainWindow(QMainWindow):
             self._waveform_view.set_editable(False)
 
     def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
         self._zone_editor.set_zone(zone)
         if zone is not None:
             sample = self._project.get_sample(zone.sample_id)
             if sample is not None:
-                self._waveform_view.load_wav(sample.resolve_path())
+                self._waveform_view.load_wav(sample.resolve_path(project_dir))
                 self._waveform_view.set_loop_region(sample.loop_start, sample.loop_end)
                 self._waveform_view.set_editable(False)
                 self._sample_panel.select_sample(sample.id)
@@ -421,42 +425,40 @@ class MainWindow(QMainWindow):
         if not paths:
             return
 
-        imported = 0
+        copied = 0
         skipped = 0
         for path in paths:
             src = Path(path)
             dst = samples_dir / src.name
-            # 若已存在同名文件，提示并跳过
+            # 若已存在同名文件，询问是否覆盖
             if dst.exists():
-                QMessageBox.information(
+                reply = QMessageBox.question(
                     self,
                     "采样已存在",
-                    f"文件 \"{src.name}\" 已经在工程中存在，已跳过。"
+                    f"文件 \"{src.name}\" 已经在工程中存在，是否覆盖？",
+                    QMessageBox.Yes | QMessageBox.No,
                 )
-                skipped += 1
-                continue
+                if reply != QMessageBox.Yes:
+                    skipped += 1
+                    continue
             try:
                 shutil.copy2(src, dst)
-                # 使用相对于工程目录的路径存储
-                rel_path = dst.relative_to(project_dir)
-                sample = SampleEntry.from_wav(dst)
-                sample.file_path = str(rel_path)
-                self._project.add_sample(sample)
-                imported += 1
+                copied += 1
             except Exception as e:
                 QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
 
-        if imported:
+        if copied:
+            self._project.sync_samples_with_directory(project_dir)
             self._last_save_state = self._project.to_dict()
             self._update_title()
             self._update_status()
-        # 刷新采样清单与 Zone 列表
-        self._sample_panel.refresh()
-        self._zone_list_panel.refresh()
-        zone = self._zone_list_panel.selected_zone()
-        if zone is not None:
-            self._zone_editor.set_zone(zone)
-        self._status_label.setText(f"已导入 {imported} 个，跳过 {skipped} 个")
+            # 刷新采样清单与 Zone 列表
+            self._sample_panel.refresh()
+            self._zone_list_panel.refresh()
+            zone = self._zone_list_panel.selected_zone()
+            if zone is not None:
+                self._zone_editor.set_zone(zone)
+        self._status_label.setText(f"已导入 {copied} 个，跳过 {skipped} 个")
 
     def _on_delete_sample(self, sample: SampleEntry) -> None:
         """删除采样：从工程中移除并删除 samples/ 目录下的真实文件。"""
@@ -489,7 +491,8 @@ class MainWindow(QMainWindow):
         self._update_status()
 
     def _on_play_sample(self, sample: SampleEntry) -> None:
-        path = sample.resolve_path()
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
+        path = sample.resolve_path(project_dir)
         if path.is_file():
             self._audio_player.play(path)
 
@@ -508,12 +511,13 @@ class MainWindow(QMainWindow):
         self._on_loop_changed(start, end)
 
     def _update_piano_roll(self) -> None:
-        zone = self._zone_editor._zone
         widget = self._piano_roll_widget
         if widget is None:
             return
-        if zone is not None:
-            widget.set_highlight([(zone.min_note, zone.max_note)], [zone.root_note])
+        if self._project is not None and self._project.zones:
+            ranges = [(z.min_note, z.max_note) for z in self._project.zones]
+            roots = [z.root_note for z in self._project.zones]
+            widget.set_highlight(ranges, roots)
         else:
             widget.clear_highlight()
 
@@ -526,19 +530,23 @@ class MainWindow(QMainWindow):
         self._play_note(note, velocity)
 
     def _play_note(self, note: int, velocity: int = 127) -> None:
-        """根据当前选中的 Zone 播放指定 note。"""
-        zone = self._zone_editor._zone
-        if zone is None:
+        """根据所有 Zone 的 note 映射播放指定 note。"""
+        if self._project is None:
             return
-        if not (zone.min_note <= note <= zone.max_note):
-            self._status_label.setText(f"Note {note} 不在当前 Zone 音域内")
-            return
-        sample = self._project.get_sample(zone.sample_id)
-        if sample is not None:
-            path = sample.resolve_path()
-            if path.is_file():
-                self._audio_player.play(path)
-                self._status_label.setText(f"预览 Note {note} (vel={velocity}): {sample.name}")
+        project_dir = Path(self._project_file_path).parent if self._project_file_path else None
+        # 找到覆盖该 note 的第一个 Zone（按Zone列表顺序）
+        for zone in self._project.zones:
+            if zone.min_note <= note <= zone.max_note:
+                sample = self._project.get_sample(zone.sample_id)
+                if sample is not None:
+                    path = sample.resolve_path(project_dir)
+                    if path.is_file():
+                        self._audio_player.play(path)
+                        self._status_label.setText(
+                            f"预览 Note {note} (vel={velocity}): {sample.name} [{zone.name or zone.id}]"
+                        )
+                        return
+        self._status_label.setText(f"Note {note} 未映射到任何 Zone")
 
     def _setup_midi(self) -> None:
         """尝试打开第一个可用的 MIDI 输入设备。"""
@@ -560,10 +568,11 @@ class MainWindow(QMainWindow):
             self._piano_roll_widget.set_theme(self._theme)
             self._piano_roll_widget.note_clicked.connect(self._on_piano_key_clicked)
             layout.addWidget(self._piano_roll_widget)
-            # 初始高亮当前 Zone
-            zone = self._zone_editor._zone
-            if zone is not None:
-                self._piano_roll_widget.set_highlight([(zone.min_note, zone.max_note)], [zone.root_note])
+            # 初始高亮所有 Zone
+            if self._project is not None and self._project.zones:
+                ranges = [(z.min_note, z.max_note) for z in self._project.zones]
+                roots = [z.root_note for z in self._project.zones]
+                self._piano_roll_widget.set_highlight(ranges, roots)
             self._piano_window.show()
         else:
             if self._piano_window.isVisible():

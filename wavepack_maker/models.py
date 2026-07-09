@@ -138,9 +138,7 @@ class SampleEntry:
         if p.is_absolute():
             return p
         if project_dir is not None:
-            candidate = project_dir / p
-            if candidate.exists():
-                return candidate
+            return project_dir / p
         return p
 
     def is_valid(self, project_dir: Optional[Path] = None) -> bool:
@@ -331,6 +329,61 @@ class Project:
         self.samples = [s for s in self.samples if s.id != sample_id]
         self.zones = [z for z in self.zones if z.sample_id != sample_id]
         self.metadata.touch_updated()
+
+    def sync_samples_with_directory(self, project_dir: Optional[Path | str] = None) -> bool:
+        """让 project.samples 与 project_dir/samples 目录保持双向同步。
+
+        - 删除 project.samples 中文件已不存在的 orphan 条目，并同步清理引用它的 Zone。
+        - 为 samples/ 目录下尚未被工程记录的 WAV 文件新建 SampleEntry。
+        - 对已存在但文件内容可能被覆盖的采样更新 metadata（sample_rate 等），
+          同时保留 id、name、root_note、loop_start/end。
+
+        返回是否发生了变更。
+        """
+        if project_dir is None:
+            project_dir = Path(self.file_path).parent if self.file_path else Path.cwd()
+        else:
+            project_dir = Path(project_dir)
+        samples_dir = project_dir / "samples"
+
+        changed = False
+
+        # 1. 清理文件不存在的 orphan sample
+        valid_samples: List[SampleEntry] = []
+        removed_ids: set[str] = set()
+        for sample in self.samples:
+            resolved = sample.resolve_path(project_dir)
+            if resolved.is_file():
+                valid_samples.append(sample)
+            else:
+                removed_ids.add(sample.id)
+                changed = True
+        if removed_ids:
+            self.samples = valid_samples
+            self.zones = [z for z in self.zones if z.sample_id not in removed_ids]
+
+        # 2. 扫描 samples/ 目录，更新已有条目并添加新条目
+        if samples_dir.is_dir():
+            path_to_sample = {sample.resolve_path(project_dir): sample for sample in self.samples}
+            for wav_path in sorted(samples_dir.glob("*.wav")):
+                wav_path = wav_path.resolve()
+                if wav_path in path_to_sample:
+                    sample = path_to_sample[wav_path]
+                    with wave.open(str(wav_path), "rb") as wf:
+                        sample.sample_rate = wf.getframerate()
+                        sample.channels = wf.getnchannels()
+                        sample.bits = wf.getsampwidth() * 8
+                        sample.nframes = wf.getnframes()
+                    sample.file_path = str(wav_path)
+                else:
+                    sample = SampleEntry.from_wav(wav_path)
+                    self.samples.append(sample)
+                    path_to_sample[wav_path] = sample
+                    changed = True
+
+        if changed:
+            self.metadata.touch_updated()
+        return changed
 
     def add_zone(self, zone: ZoneEntry) -> None:
         self.zones.append(zone)

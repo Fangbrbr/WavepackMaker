@@ -1,13 +1,11 @@
 """Zone 列表面板。"""
 
 import copy
-from pathlib import Path
 from typing import Callable, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -53,16 +51,15 @@ class ZoneListPanel(QGroupBox):
         layout.addWidget(self._table)
 
         btn_layout = QHBoxLayout()
-        self._import_btn = QPushButton("导入 WAV")
-        self._import_btn.setToolTip("导入一个或多个 WAV 文件作为可选音源")
-        self._import_btn.clicked.connect(self._on_import_wav)
         self._add_btn = QPushButton("添加 Zone")
+        self._add_btn.setToolTip("为当前选中的采样添加一个 Zone")
         self._add_btn.clicked.connect(self._on_add)
         self._remove_btn = QPushButton("删除")
+        self._remove_btn.setToolTip("删除选中的 Zone")
         self._remove_btn.clicked.connect(self._on_remove)
         self._duplicate_btn = QPushButton("复制")
+        self._duplicate_btn.setToolTip("复制选中的 Zone")
         self._duplicate_btn.clicked.connect(self._on_duplicate)
-        btn_layout.addWidget(self._import_btn)
         btn_layout.addWidget(self._add_btn)
         btn_layout.addWidget(self._remove_btn)
         btn_layout.addWidget(self._duplicate_btn)
@@ -89,43 +86,45 @@ class ZoneListPanel(QGroupBox):
         return self._project.get_sample(sample_id) if self._project else None
 
     def refresh(self) -> None:
-        selected_id = None
-        rows = self._table.selectionModel().selectedRows()
-        if rows:
-            item = self._table.item(rows[0].row(), 0)
-            if item is not None:
-                selected_id = item.data(Qt.UserRole)
+        self._table.blockSignals(True)
+        try:
+            selected_id = None
+            rows = self._table.selectionModel().selectedRows()
+            if rows:
+                item = self._table.item(rows[0].row(), 0)
+                if item is not None:
+                    selected_id = item.data(Qt.UserRole)
 
-        self._table.setRowCount(0)
-        if self._project is None:
-            return
-        for zone in self._project.zones:
-            row = self._table.rowCount()
-            self._table.insertRow(row)
-            name_item = QTableWidgetItem(zone.name or f"Zone {row + 1}")
-            name_item.setData(Qt.UserRole, zone.id)
-            self._table.setItem(row, 0, name_item)
+            self._table.setRowCount(0)
+            if self._project is None:
+                return
+            for zone in self._project.zones:
+                row = self._table.rowCount()
+                self._table.insertRow(row)
+                name_item = QTableWidgetItem(zone.name or f"Zone {row + 1}")
+                name_item.setData(Qt.UserRole, zone.id)
+                self._table.setItem(row, 0, name_item)
 
-            sample = self._get_sample(zone.sample_id)
-            sample_name = sample.name if sample else "(丢失)"
-            self._table.setItem(row, 1, QTableWidgetItem(sample_name))
-            self._table.setItem(row, 2, QTableWidgetItem(str(zone.root_note)))
-            self._table.setItem(row, 3, QTableWidgetItem(f"{zone.min_note}-{zone.max_note}"))
-            self._table.setItem(row, 4, QTableWidgetItem(f"{zone.min_vel}-{zone.max_vel}"))
-            self._table.setItem(row, 5, QTableWidgetItem(zone.poly_mode))
+                sample = self._get_sample(zone.sample_id)
+                sample_name = sample.name if sample else "(丢失)"
+                self._table.setItem(row, 1, QTableWidgetItem(sample_name))
+                self._table.setItem(row, 2, QTableWidgetItem(str(zone.root_note)))
+                self._table.setItem(row, 3, QTableWidgetItem(f"{zone.min_note}-{zone.max_note}"))
+                self._table.setItem(row, 4, QTableWidgetItem(f"{zone.min_vel}-{zone.max_vel}"))
+                self._table.setItem(row, 5, QTableWidgetItem(zone.poly_mode))
 
-            errs = zone.validate()
-            status_item = QTableWidgetItem("OK" if not errs else "错误")
-            if errs:
-                status_item.setForeground(Qt.red)
-                status_item.setToolTip("\n".join(errs))
-            else:
-                status_item.setForeground(Qt.green)
-            self._table.setItem(row, 6, status_item)
+                errs = zone.validate()
+                status_item = QTableWidgetItem("OK" if not errs else "错误")
+                if errs:
+                    status_item.setForeground(Qt.red)
+                    status_item.setToolTip("\n".join(errs))
+                else:
+                    status_item.setForeground(Qt.green)
+                self._table.setItem(row, 6, status_item)
 
-        if selected_id is not None:
-            self._table.blockSignals(True)
-            self._select_zone(selected_id)
+            if selected_id is not None:
+                self._select_zone(selected_id)
+        finally:
             self._table.blockSignals(False)
 
     def selected_zone(self) -> Optional[ZoneEntry]:
@@ -170,24 +169,6 @@ class ZoneListPanel(QGroupBox):
             self._on_duplicate()
         elif action == delete_action:
             self._on_remove()
-
-    def _on_import_wav(self) -> None:
-        if self._project is None:
-            return
-        files, _ = QFileDialog.getOpenFileNames(
-            self, "导入 WAV 音源", "", "WAV 文件 (*.wav)"
-        )
-        imported: List[SampleEntry] = []
-        for path in files:
-            try:
-                sample = SampleEntry.from_wav(path)
-                self._project.add_sample(sample)
-                imported.append(sample)
-            except Exception as e:
-                QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
-        if imported and self._on_selection_changed:
-            self.refresh()
-            self._emit_selection()
 
     def _next_note_range(self) -> tuple[int, int, int]:
         """计算新建 Zone 的默认 note 范围与根音：接在上一个 Zone 后面，默认两个八度。"""

@@ -84,31 +84,108 @@ class ThemeManager:
                 color: #ffffff;
                 border-color: {accent_light};
             }}
+            QPushButton:pressed {{
+                background-color: {accent_dark};
+                color: #ffffff;
+                border-color: {accent};
+            }}
+            QPushButton:disabled {{
+                background-color: {surface};
+                color: #888888;
+                border-color: #555555;
+            }}
             QToolBar QToolButton:hover {{
                 background-color: {accent};
                 color: #ffffff;
                 border-radius: 4px;
+            }}
+            QToolBar QToolButton:pressed {{
+                background-color: {accent_dark};
             }}
             QLineEdit, QSpinBox, QComboBox, QPlainTextEdit {{
                 background-color: {bg};
                 color: {text};
                 border: 1px solid #666666;
                 border-radius: 3px;
+                padding: 3px;
+            }}
+            QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QPlainTextEdit:focus {{
+                border: 1px solid {accent};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid {text};
+                width: 0px;
+                height: 0px;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                background: {surface};
+                border: 1px solid #666666;
+                width: 16px;
+            }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+                background: {accent};
+            }}
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: #666666;
+                border-radius: 3px;
+            }}
+            QSlider::sub-page:horizontal {{
+                background: {accent};
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {accent_light};
+                width: 12px;
+                margin: -3px 0;
+                border-radius: 6px;
             }}
             QTableWidget {{
                 background-color: {surface};
                 color: {text};
                 border: none;
                 gridline-color: transparent;
+                outline: none;
             }}
-            QTableWidget::item:selected {{
+            QTableWidget::item {{
+                padding: 4px;
+            }}
+            QTableWidget::item:selected, QTableWidget::item:selected:active, QTableWidget::item:selected:!active {{
                 background-color: {accent};
                 color: #ffffff;
+            }}
+            QTableWidget::item:focus {{
+                border: none;
+                outline: none;
             }}
             QHeaderView::section {{
                 background-color: {surface};
                 color: {text};
                 border: 1px solid #555555;
                 padding: 4px;
+            }}
+            QMenu {{
+                background-color: {surface};
+                color: {text};
+                border: 1px solid #555555;
+            }}
+            QMenu::item:selected {{
+                background-color: {accent};
+                color: #ffffff;
+            }}
+            QMenuBar {{
+                background-color: {bg};
+                color: {text};
+            }}
+            QMenuBar::item:selected {{
+                background-color: {accent};
+                color: #ffffff;
             }}
         """
