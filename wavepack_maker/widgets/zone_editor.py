@@ -38,7 +38,8 @@ class ZoneEditor(QGroupBox):
         self._on_play: Optional[Callable[[SampleEntry], None]] = None
         self._on_set_loop: Optional[Callable[[int, int], None]] = None
         self._setup_ui()
-        self.setEnabled(False)
+        # 初始不加载任何 Zone，但控件保持可用（避免显示为灰色禁用）
+        self.set_zone(None)
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -153,8 +154,26 @@ class ZoneEditor(QGroupBox):
 
     def set_zone(self, zone: Optional[ZoneEntry]) -> None:
         self._zone = zone
-        self.setEnabled(zone is not None)
         if zone is None:
+            # 清空表单但不禁用控件，避免灰色显示
+            self.blockSignals(True)
+            self._name_edit.clear()
+            self._sample_combo.setCurrentIndex(-1)
+            self._root_spin.setValue(60)
+            self._note_range_slider.set_range(0, 127)
+            self._vel_range_slider.set_range(0, 127)
+            self._poly_mode_combo.setCurrentText("retrigger")
+            self._max_same_spin.setValue(1)
+            self._pitch_spin.setValue(0)
+            self._attack_spin.setValue(0)
+            self._decay_spin.setValue(0)
+            self._sustain_slider.setValue(0)
+            self._sustain_label.setText("0")
+            self._release_spin.setValue(0)
+            self._flags_edit.clear()
+            self._validation_label.clear()
+            self._update_range_labels()
+            self.blockSignals(False)
             return
 
         self.blockSignals(True)

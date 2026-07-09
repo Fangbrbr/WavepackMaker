@@ -40,7 +40,12 @@ class SampleListPanel(QGroupBox):
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self._table.verticalHeader().setVisible(False)
         self._table.setFocusPolicy(Qt.NoFocus)
-        self._table.setStyleSheet("QTableWidget::item { border: none; outline: none; }")
+        self._table.setStyleSheet(
+            "QTableWidget { gridline-color: transparent; border: none; }"
+            "QTableWidget::item { border: none; outline: none; padding-left: 4px; }"
+            "QTableWidget::item:selected { background-color: #3a3a3a; color: #ffffff; }"
+            "QTableWidget::item:focus { border: none; outline: none; }"
+        )
         self._table.itemSelectionChanged.connect(self._emit_selection)
         layout.addWidget(self._table)
 

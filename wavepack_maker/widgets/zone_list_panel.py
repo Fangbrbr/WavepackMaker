@@ -43,7 +43,12 @@ class ZoneListPanel(QGroupBox):
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
         self._table.setFocusPolicy(Qt.NoFocus)  # 默认不显示焦点光标
-        self._table.setStyleSheet("QTableWidget::item { border: none; outline: none; }")
+        self._table.setStyleSheet(
+            "QTableWidget { gridline-color: transparent; border: none; }"
+            "QTableWidget::item { border: none; outline: none; padding-left: 4px; }"
+            "QTableWidget::item:selected { background-color: #3a3a3a; color: #ffffff; }"
+            "QTableWidget::item:focus { border: none; outline: none; }"
+        )
         for col in range(7):
             self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
