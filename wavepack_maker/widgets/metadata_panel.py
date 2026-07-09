@@ -21,7 +21,7 @@ class MetadataPanel(QGroupBox):
     """编辑 ProjectMetadata 的表单面板。"""
 
     def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__("身份证信息", parent)
+        super().__init__("工程属性", parent)
         self._metadata: Optional[ProjectMetadata] = None
         self._setup_ui()
 

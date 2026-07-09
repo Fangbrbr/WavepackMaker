@@ -1,5 +1,6 @@
 """WavePack Maker 主窗口。"""
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -140,6 +141,13 @@ class MainWindow(QMainWindow):
         )
         props_btn.triggered.connect(lambda: self._edit_properties("工程属性"))
         toolbar.addAction(props_btn)
+
+        # 右侧：导入 WAV 采样
+        import_btn = QAction(
+            self.style().standardIcon(QStyle.SP_DialogOpenButton), "导入 WAV 采样", self
+        )
+        import_btn.triggered.connect(self._import_wav_samples)
+        toolbar.addAction(import_btn)
 
         # 右侧：导出 wavepack（通过 stretch widget 靠右）
         export_btn = QAction(
@@ -337,24 +345,54 @@ class MainWindow(QMainWindow):
         self._update_piano_roll()
 
     def _import_wav_samples(self) -> None:
-        """通过文件菜单导入 WAV 音源到工程（供 Zone 选择使用）。"""
+        """导入 WAV 音源并自动复制到工程目录下的 samples/ 文件夹。"""
+        # 若工程未保存，先要求保存以确定工程目录
+        if self._project_file_path is None:
+            if not self._save_project_as():
+                return
+
+        project_dir = Path(self._project_file_path).parent
+        samples_dir = project_dir / "samples"
+        samples_dir.mkdir(parents=True, exist_ok=True)
+
         paths, _ = QFileDialog.getOpenFileNames(
             self, "导入 WAV 音源", "", "WAV 文件 (*.wav)"
         )
         if not paths:
             return
+
+        imported = 0
         for path in paths:
+            src = Path(path)
+            dst = samples_dir / src.name
+            # 若目标已存在，生成唯一文件名
+            counter = 1
+            stem = src.stem
+            suffix = src.suffix
+            while dst.exists():
+                dst = samples_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
             try:
-                sample = SampleEntry.from_wav(path)
+                shutil.copy2(src, dst)
+                # 使用相对于工程目录的路径存储
+                rel_path = dst.relative_to(project_dir)
+                sample = SampleEntry.from_wav(dst)
+                sample.file_path = str(rel_path)
                 self._project.add_sample(sample)
+                imported += 1
             except Exception as e:
                 QMessageBox.warning(self, "导入失败", f"{path}\n{e}")
+
+        if imported:
+            self._last_save_state = self._project.to_dict()
+            self._update_title()
+            self._update_status()
         # 刷新 Zone 列表的音源下拉框
         self._zone_list_panel.refresh()
         zone = self._zone_list_panel.selected_zone()
         if zone is not None:
             self._zone_editor.set_zone(zone)
-        self._update_status()
+        self._status_label.setText(f"已导入 {imported} 个 WAV 音源")
 
     def _on_zone_edited(self) -> None:
         # Zone 参数变更后刷新列表中的汇总列
