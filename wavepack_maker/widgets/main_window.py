@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from ..audio_player import AudioPlayer
 from ..builder import WavePackBuilder
+from ..midi_input import MidiInput
 from ..models import Project, ProjectMetadata, SampleEntry, ZoneEntry
 from ..project_io import load_project, save_project, suggest_project_name
 from ..validator import ValidationError, WavePackValidator
@@ -52,6 +53,8 @@ class MainWindow(QMainWindow):
         self._project_file_path: Optional[str] = None
         self._last_save_state: Optional[dict] = None
         self._audio_player = AudioPlayer()
+        self._midi_input = MidiInput(self)
+        self._midi_input.note_on.connect(self._on_midi_note_on)
         self._ignore_dirty_once = True  # 首次新建工程不弹保存询问
         self._piano_window: Optional[QWidget] = None
         self._piano_roll_widget: Optional[PianoRoll] = None
@@ -61,6 +64,7 @@ class MainWindow(QMainWindow):
         self._setup_central()
         self._setup_statusbar()
         self._new_project()
+        self._setup_midi()
 
     def _setup_menu(self) -> None:
         menu_bar = self.menuBar()
@@ -515,6 +519,14 @@ class MainWindow(QMainWindow):
 
     def _on_piano_key_clicked(self, note: int) -> None:
         """点击钢琴键：若 note 在当前 Zone 范围内则播放对应音源。"""
+        self._play_note(note)
+
+    def _on_midi_note_on(self, note: int, velocity: int) -> None:
+        """MIDI 键盘触发 NOTE_ON。"""
+        self._play_note(note, velocity)
+
+    def _play_note(self, note: int, velocity: int = 127) -> None:
+        """根据当前选中的 Zone 播放指定 note。"""
         zone = self._zone_editor._zone
         if zone is None:
             return
@@ -526,7 +538,14 @@ class MainWindow(QMainWindow):
             path = sample.resolve_path()
             if path.is_file():
                 self._audio_player.play(path)
-                self._status_label.setText(f"预览 Note {note}: {sample.name}")
+                self._status_label.setText(f"预览 Note {note} (vel={velocity}): {sample.name}")
+
+    def _setup_midi(self) -> None:
+        """尝试打开第一个可用的 MIDI 输入设备。"""
+        ports = self._midi_input.available_ports()
+        if ports:
+            if self._midi_input.open(0):
+                self._status_label.setText(f"MIDI 已连接: {ports[0]}")
 
     def _toggle_piano_keyboard(self) -> None:
         """显示/隐藏悬浮虚拟键盘窗口。"""
