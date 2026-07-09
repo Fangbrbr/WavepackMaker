@@ -410,8 +410,17 @@ class MainWindow(QMainWindow):
 
     def _import_wav_samples(self) -> None:
         """导入 WAV 音源并自动复制到工程目录下的 samples/ 文件夹。"""
-        # 若工程未保存，先要求保存以确定工程目录
+        # 若工程未保存，需要先保存工程以确定采样存放目录
         if self._project_file_path is None:
+            reply = QMessageBox.information(
+                self,
+                "需要先保存工程",
+                "导入 WAV 前需要先保存工程文件，以便将采样存放到工程目录下的 samples/ 文件夹。\n\n"
+                "点击“确定”后选择工程保存位置。",
+                QMessageBox.Ok | QMessageBox.Cancel,
+            )
+            if reply != QMessageBox.Ok:
+                return
             if not self._save_project_as():
                 return
 
@@ -530,7 +539,7 @@ class MainWindow(QMainWindow):
         self._play_note(note, velocity)
 
     def _play_note(self, note: int, velocity: int = 127) -> None:
-        """根据所有 Zone 的 note 映射播放指定 note。"""
+        """根据所有 Zone 的 note 映射播放指定 note，并按根音差计算音高。"""
         if self._project is None:
             return
         project_dir = Path(self._project_file_path).parent if self._project_file_path else None
@@ -541,9 +550,15 @@ class MainWindow(QMainWindow):
                 if sample is not None:
                     path = sample.resolve_path(project_dir)
                     if path.is_file():
-                        self._audio_player.play(path)
+                        # 以 zone.root_note 为基准，按半音差计算播放速率
+                        # 1 半音 = 100 cents，rate = 2^(cents/1200)
+                        semitones = note - zone.root_note
+                        cents = semitones * 100 + zone.pitch_cents
+                        rate = 2.0 ** (cents / 1200.0)
+                        self._audio_player.play(path, rate)
                         self._status_label.setText(
-                            f"预览 Note {note} (vel={velocity}): {sample.name} [{zone.name or zone.id}]"
+                            f"预览 Note {note} (vel={velocity}): {sample.name} "
+                            f"[{zone.name or zone.id}] rate={rate:.3f}"
                         )
                         return
         self._status_label.setText(f"Note {note} 未映射到任何 Zone")

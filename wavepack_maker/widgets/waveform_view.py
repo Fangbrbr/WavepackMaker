@@ -157,7 +157,9 @@ class WaveformView(QWidget):
         painter = QPainter(self)
         rect = self.rect()
         w, h = rect.width(), rect.height()
-        mid = h // 2
+        timeline_h = 24
+        wave_h = max(1, h - timeline_h)
+        mid = wave_h // 2
 
         if not self._samples:
             painter.setPen(Qt.white)
@@ -172,7 +174,7 @@ class WaveformView(QWidget):
         pen = QPen(self._accent)
         pen.setWidth(1)
         painter.setPen(pen)
-        scale = (h / 2 - 2) / 32768.0
+        scale = (wave_h / 2 - 2) / 32768.0
         for x, peak in enumerate(peaks):
             amp = int(peak * scale)
             painter.drawLine(x, mid - amp, x, mid + amp)
@@ -181,9 +183,44 @@ class WaveformView(QWidget):
         ls_x = self._x_for_frame(self._loop_start)
         le_x = self._x_for_frame(self._loop_end)
         painter.setPen(QPen(self._start_color, 2))
-        painter.drawLine(ls_x, 0, ls_x, h)
+        painter.drawLine(ls_x, 0, ls_x, wave_h)
         painter.setPen(QPen(self._end_color, 2))
-        painter.drawLine(le_x, 0, le_x, h)
+        painter.drawLine(le_x, 0, le_x, wave_h)
+
+        # 绘制底部时间轴
+        self._draw_time_axis(painter, w, wave_h, timeline_h)
+
+    def _draw_time_axis(self, painter: QPainter, w: int, y: int, h: int) -> None:
+        """在底部绘制时间轴（秒）。"""
+        if not self._samples or self._sample_rate <= 0:
+            return
+        total_seconds = len(self._samples) / self._sample_rate
+        if total_seconds <= 0:
+            return
+
+        # 背景条
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(40, 40, 40))
+        painter.drawRect(0, y, w, h)
+
+        # 计算合适的刻度间隔
+        target_ticks = max(2, w // 100)
+        raw_step = total_seconds / target_ticks
+        # 对齐到 1 / 2 / 5 / 10 / 20 / 30 / 60 秒
+        nice_steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60]
+        step = next((s for s in nice_steps if s >= raw_step), nice_steps[-1])
+
+        painter.setPen(QPen(Qt.white, 1))
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+
+        t = 0.0
+        while t <= total_seconds + 1e-9:
+            x = int((t / total_seconds) * w)
+            painter.drawLine(x, y, x, y + 6)
+            painter.drawText(x + 2, y + 18, f"{t:.3g}s")
+            t += step
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if not self._samples or not self._editable:

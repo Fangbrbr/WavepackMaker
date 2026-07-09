@@ -22,7 +22,7 @@ from ..models import Project, SampleEntry, ZoneEntry
 
 
 class ZoneListPanel(QGroupBox):
-    """展示工程内所有 Zone，支持增删/复制/导入音源。"""
+    """展示工程内所有 Zone，支持增删/复制。"""
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("Zone 列表", parent)

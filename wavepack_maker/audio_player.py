@@ -15,8 +15,10 @@ class AudioPlayer:
         self._player.setAudioOutput(self._audio_output)
         self._audio_output.setVolume(0.8)
 
-    def play(self, file_path: str | Path) -> None:
-        """播放指定 WAV 文件。"""
+    def play(self, file_path: str | Path, rate: float = 1.0) -> None:
+        """播放指定 WAV 文件，可指定播放速率（rate=1.0 原速，rate=2.0 快一倍/高八度）。"""
+        # QMediaPlayer.setPlaybackRate 支持范围约 0.05 ~ 5.0
+        self._player.setPlaybackRate(max(0.05, min(5.0, rate)))
         self._player.setSource(QUrl.fromLocalFile(str(file_path)))
         self._player.play()
 
