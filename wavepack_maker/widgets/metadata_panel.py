@@ -1,4 +1,4 @@
-"""身份证元数据编辑面板。"""
+"""工程属性编辑面板。"""
 
 from typing import Optional
 
@@ -59,33 +59,20 @@ class MetadataPanel(QGroupBox):
         layout.addRow("创建时间:", self._created_label)
         layout.addRow("修改时间:", self._updated_label)
 
-        # 绑定变更事件
-        for widget in (
-            self._name_edit,
-            self._version_edit,
-            self._author_edit,
-            self._copyright_edit,
-            self._category_edit,
-            self._tags_edit,
-        ):
-            widget.textChanged.connect(self._on_changed)
-        self._sample_rate_spin.valueChanged.connect(self._on_changed)
-        self._description_edit.textChanged.connect(self._on_changed)
-        self._notes_edit.textChanged.connect(self._on_changed)
-
-    def _on_changed(self) -> None:
-        if self._metadata is not None:
-            self._metadata.name = self._name_edit.text() or "未命名音色"
-            self._metadata.version = self._version_edit.text() or "1.0.0"
-            self._metadata.author = self._author_edit.text()
-            self._metadata.copyright = self._copyright_edit.text()
-            self._metadata.category = self._category_edit.text()
-            self._metadata.tags = [t.strip() for t in self._tags_edit.text().split(",") if t.strip()]
-            self._metadata.sample_rate = self._sample_rate_spin.value()
-            self._metadata.description = self._description_edit.toPlainText()
-            self._metadata.notes = self._notes_edit.toPlainText()
+    def apply_to_metadata(self, metadata: ProjectMetadata) -> None:
+        """将当前表单内容写入 metadata 对象。"""
+        metadata.name = self._name_edit.text() or "未命名音色"
+        metadata.version = self._version_edit.text() or "1.0.0"
+        metadata.author = self._author_edit.text()
+        metadata.copyright = self._copyright_edit.text()
+        metadata.category = self._category_edit.text()
+        metadata.tags = [t.strip() for t in self._tags_edit.text().split(",") if t.strip()]
+        metadata.sample_rate = self._sample_rate_spin.value()
+        metadata.description = self._description_edit.toPlainText()
+        metadata.notes = self._notes_edit.toPlainText()
 
     def set_metadata(self, metadata: ProjectMetadata) -> None:
+        """将 metadata 对象加载到表单中显示。"""
         self._metadata = metadata
         self._name_edit.setText(metadata.name)
         self._version_edit.setText(metadata.version)

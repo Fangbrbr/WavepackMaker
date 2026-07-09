@@ -11,8 +11,115 @@
     "notes": "",
     "sample_rate": 44100,
     "created_at": "2026-07-09T09:13:06.234372+00:00",
-    "updated_at": "2026-07-09T09:13:41.574988+00:00"
+    "updated_at": "2026-07-09T09:57:47.268952+00:00"
   },
-  "samples": [],
-  "zones": []
+  "samples": [
+    {
+      "id": "8684c162",
+      "file_path": "samples\\Casio-MT-45-Piano-C4.wav",
+      "name": "Casio-MT",
+      "sample_rate": 44100,
+      "channels": 2,
+      "bits": 16,
+      "nframes": 40381,
+      "root_note": 60,
+      "loop_start": 0,
+      "loop_end": 0
+    },
+    {
+      "id": "5a3c9063",
+      "file_path": "samples\\Yamaha-TG100-Ocarina-C5.wav",
+      "name": "Yamaha-T",
+      "sample_rate": 44100,
+      "channels": 2,
+      "bits": 16,
+      "nframes": 57089,
+      "root_note": 60,
+      "loop_start": 0,
+      "loop_end": 0
+    },
+    {
+      "id": "d7f241d9",
+      "file_path": "samples\\Ensoniq-SQ-2-Piano-C4.wav",
+      "name": "Ensoniq-",
+      "sample_rate": 44100,
+      "channels": 2,
+      "bits": 16,
+      "nframes": 121494,
+      "root_note": 60,
+      "loop_start": 0,
+      "loop_end": 0
+    }
+  ],
+  "zones": [
+    {
+      "id": "72e368ff",
+      "sample_id": "d7f241d9",
+      "name": "Zone 1",
+      "root_note": 60,
+      "min_note": 48,
+      "max_note": 72,
+      "min_vel": 0,
+      "max_vel": 127,
+      "flags": null,
+      "poly_mode": "retrigger",
+      "max_same_note_voices": 1,
+      "adsr": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "pitch_cents": 0,
+      "filter_cutoff": 0,
+      "filter_resonance": 0,
+      "reverb_send": 0
+    },
+    {
+      "id": "164ea11f",
+      "sample_id": "d7f241d9",
+      "name": "Zone 2",
+      "root_note": 85,
+      "min_note": 73,
+      "max_note": 97,
+      "min_vel": 0,
+      "max_vel": 127,
+      "flags": null,
+      "poly_mode": "retrigger",
+      "max_same_note_voices": 1,
+      "adsr": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "pitch_cents": 0,
+      "filter_cutoff": 0,
+      "filter_resonance": 0,
+      "reverb_send": 0
+    },
+    {
+      "id": "4cf3f08a",
+      "sample_id": "d7f241d9",
+      "name": "Zone 3",
+      "root_note": 110,
+      "min_note": 98,
+      "max_note": 122,
+      "min_vel": 0,
+      "max_vel": 127,
+      "flags": null,
+      "poly_mode": "retrigger",
+      "max_same_note_voices": 1,
+      "adsr": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "pitch_cents": 0,
+      "filter_cutoff": 0,
+      "filter_resonance": 0,
+      "reverb_send": 0
+    }
+  ]
 }

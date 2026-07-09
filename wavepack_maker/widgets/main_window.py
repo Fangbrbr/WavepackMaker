@@ -29,6 +29,7 @@ from ..project_io import load_project, save_project, suggest_project_name
 from ..validator import ValidationError, WavePackValidator
 from .metadata_panel import MetadataPanel
 from .piano_roll import PianoRoll
+from .sample_list_panel import SampleListPanel
 from .waveform_view import WaveformView
 from .zone_editor import ZoneEditor
 from .zone_list_panel import ZoneListPanel
@@ -168,13 +169,17 @@ class MainWindow(QMainWindow):
         main_splitter = QSplitter(Qt.Vertical)
         main_layout.addWidget(main_splitter)
 
-        # 上方面板：Zone 列表 | Zone 配置
+        # 上方面板：采样清单 | Zone 列表 | Zone 配置
         top_widget = QWidget()
         top_layout = QHBoxLayout(top_widget)
         top_layout.setContentsMargins(0, 0, 0, 0)
 
         top_splitter = QSplitter(Qt.Horizontal)
         top_layout.addWidget(top_splitter)
+
+        self._sample_panel = SampleListPanel()
+        self._sample_panel.set_on_selection_changed(self._on_sample_selected)
+        top_splitter.addWidget(self._sample_panel)
 
         self._zone_list_panel = ZoneListPanel()
         self._zone_list_panel.set_on_selection_changed(self._on_zone_selected)
@@ -186,10 +191,11 @@ class MainWindow(QMainWindow):
         self._zone_editor.set_on_set_loop(self._on_apply_loop)
         top_splitter.addWidget(self._zone_editor)
 
-        # Zone 列表占更大空间，方便管理大量 Zone
-        top_splitter.setSizes([850, 550])
-        top_splitter.setStretchFactor(0, 3)
-        top_splitter.setStretchFactor(1, 2)
+        # 采样清单较窄，Zone 列表和配置占主要空间
+        top_splitter.setSizes([160, 640, 500])
+        top_splitter.setStretchFactor(0, 0)
+        top_splitter.setStretchFactor(1, 3)
+        top_splitter.setStretchFactor(2, 2)
 
         main_splitter.addWidget(top_widget)
 
@@ -287,11 +293,26 @@ class MainWindow(QMainWindow):
             return False
 
     def _bind_project(self) -> None:
+        self._sample_panel.set_project(self._project)
         self._zone_list_panel.set_project(self._project)
         self._zone_editor.set_project(self._project)
-        self._zone_editor.set_zone(None)
+
+        # 自动选中第一个采样
+        if self._project.samples:
+            first_sample = self._project.samples[0]
+            self._sample_panel.select_sample(first_sample.id)
+        else:
+            self._waveform_view.clear()
+
+        # 自动选中第一个 Zone
+        if self._project.zones:
+            first_zone = self._project.zones[0]
+            self._zone_list_panel._select_zone(first_zone.id)
+            self._zone_editor.set_zone(first_zone)
+        else:
+            self._zone_editor.set_zone(None)
+
         self._update_piano_roll()
-        self._waveform_view.clear()
 
     def _maybe_save_dirty(self) -> bool:
         """若工程有未保存修改，询问是否保存；返回 False 表示取消操作。"""
@@ -332,16 +353,16 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # 交互回调
     # ------------------------------------------------------------------
-    def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
-        self._zone_editor.set_zone(zone)
-        if zone is not None:
-            sample = self._project.get_sample(zone.sample_id)
-            if sample is not None:
-                self._waveform_view.load_wav(sample.resolve_path())
-            else:
-                self._waveform_view.clear()
+    def _on_sample_selected(self, sample: Optional[SampleEntry]) -> None:
+        """点击采样清单时，在波形预览中显示该采样。"""
+        if sample is not None:
+            self._waveform_view.load_wav(sample.resolve_path())
         else:
             self._waveform_view.clear()
+
+    def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
+        self._zone_editor.set_zone(zone)
+        # Zone 选中时同步更新钢琴键高亮；波形由采样清单控制
         self._update_piano_roll()
 
     def _import_wav_samples(self) -> None:
@@ -387,7 +408,8 @@ class MainWindow(QMainWindow):
             self._last_save_state = self._project.to_dict()
             self._update_title()
             self._update_status()
-        # 刷新 Zone 列表的音源下拉框
+        # 刷新采样清单与 Zone 列表
+        self._sample_panel.refresh()
         self._zone_list_panel.refresh()
         zone = self._zone_list_panel.selected_zone()
         if zone is not None:
@@ -439,10 +461,8 @@ class MainWindow(QMainWindow):
                 self._status_label.setText(f"预览 Note {note}: {sample.name}")
 
     def _edit_properties(self, title: str = "工程属性") -> None:
-        """弹出工程属性对话框编辑身份证元数据。"""
+        """弹出工程属性对话框编辑工程元数据。"""
         from PySide6.QtWidgets import QDialogButtonBox
-
-        snapshot = self._project.metadata.to_dict()
 
         dialog = QDialog(self)
         dialog.setWindowTitle(title)
@@ -462,10 +482,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(btns)
 
         if dialog.exec() == QDialog.Accepted:
-            self._update_status()
-        else:
-            # 取消时恢复之前的元数据快照
-            self._project.metadata = ProjectMetadata.from_dict(snapshot)
+            panel.apply_to_metadata(self._project.metadata)
+            self._project.metadata.touch_updated()
+            self._last_save_state = self._project.to_dict()
             self._update_status()
 
     def _export_wavepack(self) -> None:
