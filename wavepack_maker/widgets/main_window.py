@@ -118,6 +118,14 @@ class MainWindow(QMainWindow):
         new_btn.triggered.connect(self._new_project)
         toolbar.addAction(new_btn)
 
+        # 左侧：打开工程
+        open_btn = QAction(
+            self.style().standardIcon(QStyle.SP_DirOpenIcon), "打开工程", self
+        )
+        open_btn.setShortcut(QKeySequence.StandardKey.Open)
+        open_btn.triggered.connect(self._open_project)
+        toolbar.addAction(open_btn)
+
         # 左侧：保存工程
         save_btn = QAction(
             self.style().standardIcon(QStyle.SP_DialogSaveButton), "保存工程", self
