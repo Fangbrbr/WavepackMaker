@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -173,8 +173,8 @@ class MainWindow(QMainWindow):
         self._bind_project()
         self._update_title()
         self._update_status()
-        # 新建工程后弹出工程属性，让用户先完成第一次设置
-        self._edit_properties()
+        # 主窗口显示后再延迟弹出工程属性，避免界面未加载先弹窗
+        QTimer.singleShot(300, self._edit_properties)
 
     def _open_project(self) -> None:
         if not self._maybe_save_dirty():
