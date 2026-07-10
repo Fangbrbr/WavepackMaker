@@ -98,6 +98,22 @@ git tag v1.1.0
 git push origin v1.1.0
 ```
 
+## ⚠️ 严禁 Agent 自行打 Tag / 发版
+
+**打 Tag、创建 Release、推送到远程仓库发布版本，必须由用户本人给出明确、严肃的指令后才可以执行。**
+
+Agent **绝对不允许**在以下任何场景自行操作：
+- 创建 `git tag`
+- 删除 `git tag`
+- 推送 tag 到远程
+- 触发 GitHub Release
+- 代替用户决定版本号
+
+Agent 可以做的：
+- 修改代码、跑测试、提交到当前分支
+- 向用户报告状态
+- 在用户明确说"打 tag vX.Y.Z 并发布"之后，才执行对应命令
+
 ## 提交流程
 
 1. 修改代码后运行 `python -m py_compile` 确保无语法错误。
@@ -105,4 +121,4 @@ git push origin v1.1.0
 3. 如果修改了功能或流程，同步更新 `README.md` 与本 `AGENTS.md`。
 4. 使用 `git add` 暂存相关文件。
 5. 使用 `git commit` 提交，提交信息用中文简要说明修改内容。
-6. 如需发版，执行 `git tag vX.Y.Z && git push origin vX.Y.Z`。
+6. **只有用户明确说"打 tag vX.Y.Z 并发布"时**，才执行 `git tag vX.Y.Z && git push origin vX.Y.Z`。

@@ -105,7 +105,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build_exe.ps1
 
 ## 发布流程（GitHub Actions）
 
-项目配置了 `.github/workflows/release.yml`，推送 `v*` 标签会自动打包并创建 Release：
+> ⚠️ **只有项目所有者本人才能决定何时打 tag 发布。Agent 或自动化脚本严禁自行创建/推送 tag。**
+
+项目配置了 `.github/workflows/release.yml`，**由用户手动推送 `v*` 标签**后会自动打包并创建 Release：
 
 ```bash
 git tag v1.1.0
