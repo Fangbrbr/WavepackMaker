@@ -167,10 +167,9 @@ class MainWindow(QMainWindow):
         import_btn.triggered.connect(self._import_wav_samples)
         toolbar.addAction(import_btn)
 
-        # 右侧：虚拟键盘
-        keyboard_btn = QAction(
-            self.style().standardIcon(QStyle.SP_MediaPlay), "虚拟键盘", self
-        )
+        # 右侧：虚拟键盘（使用文字按钮，避免暗色图标在灰黑背景看不清）
+        keyboard_btn = QAction("🎹 虚拟键盘", self)
+        keyboard_btn.setToolTip("打开/关闭悬浮虚拟键盘")
         keyboard_btn.triggered.connect(self._toggle_piano_keyboard)
         toolbar.addAction(keyboard_btn)
 
@@ -615,11 +614,13 @@ class MainWindow(QMainWindow):
             widget.clear_highlight()
 
     def _on_piano_key_clicked(self, note: int) -> None:
-        """点击钢琴键：若 note 在当前 Zone 范围内则播放对应音源。"""
-        self._play_note(note)
+        """点击钢琴键：通过 MIDI 引擎触发 NOTE_ON。"""
+        self._on_midi_note_on(note)
 
-    def _on_midi_note_on(self, note: int, velocity: int) -> None:
-        """MIDI 键盘触发 NOTE_ON。"""
+    def _on_midi_note_on(self, note: int, velocity: int = 127) -> None:
+        """MIDI 引擎：触发 NOTE_ON，并在钢琴卷帘上显示按下状态。"""
+        if self._piano_roll_widget is not None:
+            self._piano_roll_widget.press_note(note)
         self._play_note(note, velocity)
 
     def _play_note(self, note: int, velocity: int = 127) -> None:
