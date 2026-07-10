@@ -11,13 +11,17 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QSizePolicy,
     QSpinBox,
     QSplitter,
@@ -717,16 +721,78 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "导出失败", str(e))
 
     def _show_about(self) -> None:
-        QMessageBox.about(
-            self,
-            "关于 WavePack Maker",
-            "<h2>WavePack Maker</h2>"
-            "<p>面向 ESP32Synth 的专业音色打包/编辑上位机工具。</p>"
-            "<p>工程文件后缀: .wpp<br>"
-            "输出文件后缀: .wavepack</p>"
-            "<p>作者: Fmil<br>"
-            "邮箱: <a href=\"mailto:fmil123@qq.com\">fmil123@qq.com</a></p>",
+        """弹出自定义 About 对话框，预留 Logo 框，文字大气居中/对齐。"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("关于 WavePack Maker")
+        dialog.setMinimumWidth(420)
+        dialog.setMaximumWidth(520)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setAlignment(Qt.AlignCenter)
+
+        # Logo 占位框
+        logo_frame = QFrame()
+        logo_frame.setFixedSize(120, 120)
+        logo_frame.setStyleSheet(
+            "QFrame { border: 2px dashed #888888; border-radius: 12px; background-color: #3a3a3a; }"
         )
+        logo_label = QLabel("LOGO")
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_label.setStyleSheet("color: #888888; font-size: 14px;")
+        logo_layout = QVBoxLayout(logo_frame)
+        logo_layout.addWidget(logo_label)
+        layout.addWidget(logo_frame, alignment=Qt.AlignCenter)
+
+        # 标题
+        title = QLabel("WavePack Maker")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #ffffff;")
+        layout.addWidget(title)
+
+        # 副标题
+        subtitle = QLabel("面向 ESP32Synth 的专业音色打包/编辑上位机工具")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("font-size: 12px; color: #aaaaaa;")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        # 信息网格（多列分别对齐）
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(20)
+        grid.setVerticalSpacing(8)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+
+        info_items = [
+            ("工程文件后缀", ".wpp"),
+            ("输出文件后缀", ".wavepack"),
+            ("作者", "Fmil"),
+            ("邮箱", "fmil123@qq.com"),
+        ]
+        for row, (label, value) in enumerate(info_items):
+            lbl = QLabel(f"{label}:")
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lbl.setStyleSheet("color: #cccccc;")
+            val = QLabel(value)
+            val.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            val.setStyleSheet("color: #ffffff;")
+            if label == "邮箱":
+                val.setText("<a href=\"mailto:fmil123@qq.com\" style=\"color: #4dabf7;\">fmil123@qq.com</a>")
+                val.setOpenExternalLinks(True)
+            grid.addWidget(lbl, row, 0)
+            grid.addWidget(val, row, 1)
+        layout.addLayout(grid)
+
+        layout.addStretch()
+
+        # 确定按钮
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        btn_box.accepted.connect(dialog.accept)
+        layout.addWidget(btn_box, alignment=Qt.AlignCenter)
+
+        dialog.exec()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         """未在输入控件内时，键盘按键直接触发 MIDI note 预览。"""
