@@ -37,6 +37,7 @@ from ..midi_input import MidiInput
 from ..models import Project, ProjectMetadata, SampleEntry, ZoneEntry
 from ..project_io import load_project, save_project, suggest_project_name
 from ..validator import ValidationError, WavePackValidator
+from .._version import __build_time__, __version__
 from .metadata_panel import MetadataPanel
 from .piano_roll import PianoRoll
 from .sample_list_panel import SampleListPanel
@@ -781,6 +782,8 @@ class MainWindow(QMainWindow):
         grid.setColumnStretch(1, 2)
 
         info_items = [
+            ("版本", __version__),
+            ("编译时间", __build_time__[:19].replace("T", " ") + " UTC"),
             ("作者", "Fmil"),
             ("邮箱", "fmil123@qq.com"),
         ]

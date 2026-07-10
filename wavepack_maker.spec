@@ -7,6 +7,7 @@ from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 
 project_root = Path(SPECPATH).resolve()
 icon_path = project_root / "assets" / "logo.ico"
+version_file = project_root / "build" / "version_info.txt"
 
 a = Analysis(
     ['main.py'],
@@ -47,4 +48,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(icon_path) if icon_path.is_file() else None,
+    version=str(version_file) if version_file.is_file() else None,
 )

@@ -10,8 +10,14 @@ if (-not (Test-Path $venvPython)) {
     exit 1
 }
 
+Write-Host "生成版本信息..."
+& $venvPython ([System.IO.Path]::Combine($PSScriptRoot, "scripts", "gen_version.py"))
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "版本信息生成失败"
+    exit 1
+}
+
 Write-Host "清理旧构建..."
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PSScriptRoot "build")
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PSScriptRoot "dist")
 
 Write-Host "运行 PyInstaller 打包..."

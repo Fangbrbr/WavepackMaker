@@ -1,0 +1,61 @@
+name: Release WavePack Maker
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要完整 git 历史以获取 tag/commit 版本
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+
+      - name: Build executable
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "."
+          .\.venv\Scripts\python.exe scripts\gen_version.py
+          .\.venv\Scripts\python.exe -m PyInstaller wavepack_maker.spec --noconfirm --clean
+
+      - name: Rename artifact with version
+        shell: pwsh
+        run: |
+          $version = git describe --tags --exact-match 2>$null
+          if (-not $version) { $version = git rev-parse --short HEAD }
+          $src = "dist\WavePackMaker.exe"
+          $dst = "dist\WavePackMaker-$version.exe"
+          Move-Item -Path $src -Destination $dst
+          Write-Host "Artifact: $dst"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WavePackMaker-windows
+          path: dist/WavePackMaker-*.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/WavePackMaker-*.exe
+          generate_release_notes: true
