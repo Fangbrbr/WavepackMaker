@@ -208,10 +208,14 @@ class WaveformView(QWidget):
             amp = int(peak * scale)
             painter.drawLine(x, mid - amp, x, mid + amp)
 
-        # 绘制裁剪区域背景（红色半透明）
+        # 绘制裁剪区域背景：红色仅覆盖将被删除的两侧区域，保留中间有效波形为黑底
         ts_x = self._x_for_frame(self._trim_start)
         te_x = self._x_for_frame(self._trim_end)
-        painter.fillRect(ts_x, 0, te_x - ts_x, wave_h, QColor(self._trim_color.red(), self._trim_color.green(), self._trim_color.blue(), 40))
+        trim_bg = QColor(self._trim_color.red(), self._trim_color.green(), self._trim_color.blue(), 40)
+        if ts_x > 0:
+            painter.fillRect(0, 0, ts_x, wave_h, trim_bg)
+        if te_x < w:
+            painter.fillRect(te_x, 0, w - te_x, wave_h, trim_bg)
         painter.setPen(QPen(self._trim_color, 2))
         painter.drawLine(ts_x, 0, ts_x, wave_h)
         painter.drawLine(te_x, 0, te_x, wave_h)
@@ -226,6 +230,22 @@ class WaveformView(QWidget):
 
         # 绘制底部时间轴
         self._draw_time_axis(painter, w, wave_h, timeline_h)
+
+        # 右下角操作提示
+        hint_lines = [
+            "左/右键：Loop 起/止",
+            "Ctrl+左/右键：裁剪区",
+        ]
+        painter.setPen(QPen(QColor(160, 160, 160), 1))
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        line_h = fm.height()
+        padding = 6
+        for i, line in enumerate(reversed(hint_lines)):
+            ty = wave_h - padding - i * line_h
+            painter.drawText(w - fm.horizontalAdvance(line) - padding, ty, line)
 
     def _draw_time_axis(self, painter: QPainter, w: int, y: int, h: int) -> None:
         """在底部绘制时间轴（秒）。"""
