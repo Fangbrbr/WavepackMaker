@@ -3,6 +3,7 @@
 from typing import Callable, List, Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -353,3 +354,8 @@ class ZoneEditor(QGroupBox):
     def _on_crop_clicked(self) -> None:
         if self._on_crop is not None:
             self._on_crop(0, 0)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """点击面板空白处时移除输入焦点，触发当前输入框的编辑完成。"""
+        self.setFocus()
+        super().mousePressEvent(event)

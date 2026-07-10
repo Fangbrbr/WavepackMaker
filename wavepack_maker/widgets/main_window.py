@@ -723,7 +723,9 @@ class MainWindow(QMainWindow):
             "<h2>WavePack Maker</h2>"
             "<p>面向 ESP32Synth 的专业音色打包/编辑上位机工具。</p>"
             "<p>工程文件后缀: .wpp<br>"
-            "输出文件后缀: .wavepack</p>",
+            "输出文件后缀: .wavepack</p>"
+            "<p>作者: Fmil<br>"
+            "邮箱: <a href=\"mailto:fmil123@qq.com\">fmil123@qq.com</a></p>",
         )
 
     def keyPressEvent(self, event) -> None:  # noqa: N802

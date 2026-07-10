@@ -3,6 +3,7 @@
 from typing import Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
@@ -85,3 +86,8 @@ class MetadataPanel(QGroupBox):
         self._notes_edit.setPlainText(metadata.notes)
         self._created_label.setText(metadata.created_at)
         self._updated_label.setText(metadata.updated_at)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+        """点击面板空白处时移除输入焦点，触发当前输入框的编辑完成。"""
+        self.setFocus()
+        super().mousePressEvent(event)
