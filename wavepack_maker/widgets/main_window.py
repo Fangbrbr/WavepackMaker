@@ -295,6 +295,7 @@ class MainWindow(QMainWindow):
             return self._save_project_as()
         try:
             save_project(self._project, self._project_file_path)
+            self._ensure_project_dirs()
             self._last_save_state = self._project.to_dict()
             self._update_title()
             self._update_status()
@@ -314,6 +315,7 @@ class MainWindow(QMainWindow):
             path += ".wpp"
         try:
             self._project_file_path = save_project(self._project, path)
+            self._ensure_project_dirs()
             self._last_save_state = self._project.to_dict()
             self._update_title()
             self._update_status()
@@ -321,6 +323,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "保存失败", str(e))
             return False
+
+    def _ensure_project_dirs(self) -> None:
+        """确保工程目录下存在 samples/ 和 output/ 子目录。"""
+        if self._project_file_path is None:
+            return
+        project_dir = Path(self._project_file_path).parent
+        (project_dir / "samples").mkdir(parents=True, exist_ok=True)
+        (project_dir / "output").mkdir(parents=True, exist_ok=True)
 
     def _bind_project(self) -> None:
         project_dir = Path(self._project_file_path).parent if self._project_file_path else None
@@ -701,9 +711,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "导出前校验失败", "\n".join(errs))
             return
 
+        # 默认导出路径：工程目录/output/音色名.wavepack
         default_name = f"{self._project.metadata.name}.wavepack"
+        if self._project_file_path is not None:
+            default_path = str(Path(self._project_file_path).parent / "output" / default_name)
+        else:
+            default_path = default_name
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出 .wavepack", default_name, "WavePack 文件 (*.wavepack)"
+            self, "导出 .wavepack", default_path, "WavePack 文件 (*.wavepack)"
         )
         if not path:
             return
@@ -758,16 +773,14 @@ class MainWindow(QMainWindow):
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
-        # 信息网格（多列分别对齐）
+        # 信息网格（多列分别对齐，标题列:信息列 = 1:2）
         grid = QGridLayout()
         grid.setHorizontalSpacing(20)
         grid.setVerticalSpacing(8)
         grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(1, 2)
 
         info_items = [
-            ("工程文件后缀", ".wpp"),
-            ("输出文件后缀", ".wavepack"),
             ("作者", "Fmil"),
             ("邮箱", "fmil123@qq.com"),
         ]
