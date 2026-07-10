@@ -335,7 +335,6 @@ class MainWindow(QMainWindow):
     def _bind_project(self) -> None:
         project_dir = Path(self._project_file_path).parent if self._project_file_path else None
         self._project.sync_samples_with_directory(project_dir)
-        self._project.sync_sample_root_notes()
         self._sample_panel.set_project(self._project)
         self._zone_list_panel.set_project(self._project)
         self._zone_editor.set_project(self._project)
@@ -608,8 +607,13 @@ class MainWindow(QMainWindow):
         if widget is None:
             return
         if self._project is not None and self._project.zones:
-            ranges = [(z.min_note, z.max_note) for z in self._project.zones]
-            roots = [z.root_note for z in self._project.zones]
+            ranges = []
+            roots = []
+            for z in self._project.zones:
+                sample = self._project.get_sample(z.sample_id)
+                if sample is not None:
+                    ranges.append((z.min_note, z.max_note))
+                    roots.append(sample.root_note)
             widget.set_highlight(ranges, roots)
         else:
             widget.clear_highlight()
@@ -636,9 +640,9 @@ class MainWindow(QMainWindow):
                 if sample is not None:
                     path = sample.resolve_path(project_dir)
                     if path.is_file():
-                        # 以 zone.root_note 为基准，按半音差计算播放速率
+                        # 以 sample.root_note 为基准，按半音差计算播放速率
                         # 1 半音 = 100 cents，rate = 2^(cents/1200)
-                        semitones = note - zone.root_note
+                        semitones = note - sample.root_note
                         cents = semitones * 100 + zone.pitch_cents
                         rate = 2.0 ** (cents / 1200.0)
                         self._audio_player.play(path, rate)
@@ -671,8 +675,13 @@ class MainWindow(QMainWindow):
             layout.addWidget(self._piano_roll_widget)
             # 初始高亮所有 Zone
             if self._project is not None and self._project.zones:
-                ranges = [(z.min_note, z.max_note) for z in self._project.zones]
-                roots = [z.root_note for z in self._project.zones]
+                ranges = []
+                roots = []
+                for z in self._project.zones:
+                    sample = self._project.get_sample(z.sample_id)
+                    if sample is not None:
+                        ranges.append((z.min_note, z.max_note))
+                        roots.append(sample.root_note)
                 self._piano_roll_widget.set_highlight(ranges, roots)
             self._piano_window.show()
         else:

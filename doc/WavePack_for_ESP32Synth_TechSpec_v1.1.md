@@ -1,6 +1,6 @@
 # WavePack for ESP32Synth 技术规范 v1.0
 
-> **版本**：v1.0（二进制 `version` 字段 `0x0100`）  
+> **版本**：v1.1（二进制 `version` 字段 `0x0101`）  
 > **目标平台**：ESP32-P4（M5Stack Tab5）  
 > **底层引擎**：ESP32Synth v2.4.1  
 > **文档日期**：2026-07-08  
@@ -18,7 +18,7 @@
 典型应用场景：
 
 - **钢琴音色**：用 C2、C4、C6 三个根音采样覆盖低/中/高音区，解决单一 C4 采样跨八度拉伸后音质劣化的问题。
-- **鼓组音色**：把 Kick、Snare、Hi-Hat 等打击乐采样封装在一起，每个 Zone 的 `min_note == max_note == root_note`，对应 GM Drum Map（Note 36 = Kick、38 = Snare、42 = Closed Hi-Hat 等）。
+- **鼓组音色**：把 Kick、Snare、Hi-Hat 等打击乐采样封装在一起，每个 Zone 的 `min_note == max_note`，对应 GM Drum Map（Note 36 = Kick、38 = Snare、42 = Closed Hi-Hat 等）。
 
 ### 1.2 WavePack 不是什么
 
@@ -84,12 +84,12 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     uint8_t  zone_id;           // 0~255，调试用，不参与查找
     uint8_t  sample_idx;        // 指向 Sample Directory 的索引，必须 < num_samples
-    uint8_t  root_note;         // MIDI 根音（60 = C4）
     uint8_t  min_note;          // 音域下限（0~127）
     uint8_t  max_note;          // 音域上限（0~127），必须 >= min_note
     uint8_t  min_vel;           // 力度下限（0~127）
     uint8_t  max_vel;           // 力度上限（0~127），必须 >= min_vel
     uint8_t  flags;             // 见 ZONE_FLAG_* 定义
+    uint8_t  reserved0;         // 对齐填充
 
     uint16_t attack_ms;         // ADSR Attack（ms）
     uint16_t decay_ms;          // ADSR Decay（ms）
@@ -119,7 +119,7 @@ typedef struct __attribute__((packed)) {
 **Zone `flags` 定义**：
 
 ```c
-#define ZONE_FLAG_PERCUSSION            0x00  // bit0=0: 固定音高，按 root_note 原样播放
+#define ZONE_FLAG_PERCUSSION            0x00  // bit0=0: 固定音高，按 Sample.root_note 原样播放
 #define ZONE_FLAG_MELODIC               0x01  // bit0=1: 可拉伸，按目标 note 计算 pitch shift
 #define ZONE_FLAG_LOOP                  0x02  // bit1: 强制循环（可覆盖 Sample 自身 loop 设置）
 
@@ -138,7 +138,8 @@ typedef struct __attribute__((packed)) {
 
 - 一个 Zone 描述一种"发声映射"：在什么 note 范围、什么 velocity 范围内，触发哪个采样。
 - 多个 Zone 可以指向同一个 Sample，用于力度分层或 note 重叠区。
-- 对于打击乐 Zone，必须满足 `min_note == max_note == root_note`，且 `flags` 通常设置为 `ZONE_FLAG_PERCUSSION | ZONE_FLAG_POLY_RETRIGGER`。
+- 一个 Zone 唯一绑定一个 Sample；不同 Zone 的 `note` 范围不允许重叠。
+- 对于打击乐 Zone，必须满足 `min_note == max_note`，且 `flags` 通常设置为 `ZONE_FLAG_PERCUSSION | ZONE_FLAG_POLY_RETRIGGER`。
 - 对于旋律 Zone，通常满足 `min_note < max_note`，且 `flags` 通常设置为 `ZONE_FLAG_MELODIC | ZONE_FLAG_POLY_MULTI`。
 - `pitch_cents` 限制在 ±100 cents；超出该范围的值下位机应饱和处理。
 - **复音策略在 Zone 级别定义**：同一个 Note 被再次触发时，根据 `flags` 的 bit2~7 决定分配新 Voice、重触发原 Voice 还是 Legato 复用。
@@ -231,40 +232,15 @@ tools/wavepack/            # 上位机工具目录
 {
   "name": "Acoustic Piano",
   "sample_rate": 44100,
+  "samples": [
+    { "file": "piano_c2.wav", "root_note": 36, "loop_start": 0, "loop_end": 0 },
+    { "file": "piano_c4.wav", "root_note": 60, "loop_start": 0, "loop_end": 0 },
+    { "file": "piano_c6.wav", "root_note": 84, "loop_start": 0, "loop_end": 0 }
+  ],
   "zones": [
-    {
-      "file": "piano_c2.wav",
-      "root_note": 36,
-      "min_note": 0,
-      "max_note": 43,
-      "min_vel": 0,
-      "max_vel": 127,
-      "flags": 21,
-      "adsr": [5, 1500, 0, 120],
-      "pitch_cents": 0
-    },
-    {
-      "file": "piano_c4.wav",
-      "root_note": 60,
-      "min_note": 44,
-      "max_note": 67,
-      "min_vel": 0,
-      "max_vel": 127,
-      "flags": 21,
-      "adsr": [5, 1200, 0, 120],
-      "pitch_cents": 0
-    },
-    {
-      "file": "piano_c6.wav",
-      "root_note": 84,
-      "min_note": 68,
-      "max_note": 96,
-      "min_vel": 0,
-      "max_vel": 127,
-      "flags": 21,
-      "adsr": [5, 1000, 0, 120],
-      "pitch_cents": 0
-    }
+    { "sample_idx": 0, "min_note": 0,  "max_note": 43, "min_vel": 0, "max_vel": 127, "flags": 21, "adsr": [5, 1500, 0, 120], "pitch_cents": 0 },
+    { "sample_idx": 1, "min_note": 44, "max_note": 67, "min_vel": 0, "max_vel": 127, "flags": 21, "adsr": [5, 1200, 0, 120], "pitch_cents": 0 },
+    { "sample_idx": 2, "min_note": 68, "max_note": 96, "min_vel": 0, "max_vel": 127, "flags": 21, "adsr": [5, 1000, 0, 120], "pitch_cents": 0 }
   ]
 }
 ```
@@ -275,15 +251,17 @@ tools/wavepack/            # 上位机工具目录
 {
   "name": "Standard Drum Kit",
   "sample_rate": 44100,
+  "samples": [
+    { "file": "kick.wav",    "root_note": 36, "loop_start": 0, "loop_end": 0 },
+    { "file": "snare.wav",   "root_note": 38, "loop_start": 0, "loop_end": 0 },
+    { "file": "hihat_c.wav", "root_note": 42, "loop_start": 0, "loop_end": 0 },
+    { "file": "hihat_o.wav", "root_note": 46, "loop_start": 0, "loop_end": 0 }
+  ],
   "zones": [
-    { "file": "kick.wav",      "root_note": 36, "min_note": 36, "max_note": 36, "flags": 0, "adsr": [1, 200, 0, 200] },
-    { "file": "snare.wav",     "root_note": 38, "min_note": 38, "max_note": 38, "flags": 0, "adsr": [1, 100, 0, 300] },
-    { "file": "hihat_c.wav",   "root_note": 42, "min_note": 42, "max_note": 42, "flags": 0, "adsr": [1, 50, 0, 100] },
-    { "file": "hihat_o.wav",   "root_note": 46, "min_note": 46, "max_note": 46, "flags": 0, "adsr": [1, 80, 0, 150] },
-    { "file": "tom_high.wav",  "root_note": 50, "min_note": 50, "max_note": 50, "flags": 0, "adsr": [1, 120, 0, 200] },
-    { "file": "tom_mid.wav",   "root_note": 47, "min_note": 47, "max_note": 47, "flags": 0, "adsr": [1, 120, 0, 200] },
-    { "file": "crash.wav",     "root_note": 49, "min_note": 49, "max_note": 49, "flags": 0, "adsr": [1, 300, 0, 800] },
-    { "file": "clap.wav",      "root_note": 39, "min_note": 39, "max_note": 39, "flags": 0, "adsr": [1, 80, 0, 250] }
+    { "sample_idx": 0, "min_note": 36, "max_note": 36, "flags": 0, "adsr": [1, 200, 0, 200] },
+    { "sample_idx": 1, "min_note": 38, "max_note": 38, "flags": 0, "adsr": [1, 100, 0, 300] },
+    { "sample_idx": 2, "min_note": 42, "max_note": 42, "flags": 0, "adsr": [1, 50, 0, 100] },
+    { "sample_idx": 3, "min_note": 46, "max_note": 46, "flags": 0, "adsr": [1, 80, 0, 150] }
   ]
 }
 ```
@@ -294,9 +272,13 @@ tools/wavepack/            # 上位机工具目录
 |---|---|---|---|
 | `name` | string | 是 | 音色名称，仅用于上位机展示 |
 | `sample_rate` | int | 是 | 全局采样率，通常 44100 |
+| `samples` | array | 是 | 采样列表 |
+| `samples[].file` | string | 是 | WAV 文件路径（相对 pack.json 目录） |
+| `samples[].root_note` | int | 是 | 采样原始 MIDI 根音，决定播放速度基准 |
+| `samples[].loop_start` | int | 否 | 循环起始样本偏移，默认 0 |
+| `samples[].loop_end` | int | 否 | 循环结束样本偏移（左闭右开），默认 0 |
 | `zones` | array | 是 | Zone 列表 |
-| `zones[].file` | string | 是 | WAV 文件路径（相对 pack.json 目录） |
-| `zones[].root_note` | int | 是 | MIDI 根音 |
+| `zones[].sample_idx` | int | 是 | 指向 `samples` 数组的索引 |
 | `zones[].min_note` | int | 是 | 音域下限 |
 | `zones[].max_note` | int | 是 | 音域上限 |
 | `zones[].min_vel` | int | 否 | 默认 0 |
@@ -306,8 +288,6 @@ tools/wavepack/            # 上位机工具目录
 | `zones[].max_same_note_voices` | int | 否 | 同音最大 Voice 数，默认 2（multi）/ 1（retrigger、legato） |
 | `zones[].adsr` | array | 否 | 默认 `[5, 1500, 0, 120]`，单位为 `[ms, ms, level_0_255, ms]` |
 | `zones[].pitch_cents` | int | 否 | 默认 0，范围 -100~+100 |
-| `zones[].loop_start` | int | 否 | 覆盖 WAV 自动检测，默认 0 |
-| `zones[].loop_end` | int | 否 | 覆盖 WAV 自动检测，默认 0 |
 
 **推荐 `poly_mode` 配置**：
 
@@ -329,7 +309,7 @@ import os
 import math
 from pathlib import Path
 
-WAVEPACK_VERSION = 0x0100
+WAVEPACK_VERSION = 0x0101
 
 class WavePackBuilder:
     def __init__(self, sample_rate=44100):
@@ -338,12 +318,8 @@ class WavePackBuilder:
         self.samples = []
         self.pcm_data = bytearray()
 
-    def add_zone(self, wav_path, root_note, min_note, max_note,
-                 min_vel=0, max_vel=127, flags=None,
-                 poly_mode="multi", max_same_note_voices=2,
-                 adsr=(5, 1500, 0, 120), pitch_cents=0,
-                 loop_start=0, loop_end=0, name=""):
-        # 读取 WAV，强制转 s16le mono
+    def add_sample(self, wav_path, root_note, loop_start=0, loop_end=0, name=""):
+        """读取 WAV 并注册一个 Sample；返回 sample_idx。"""
         with wave.open(str(wav_path), 'rb') as wf:
             nch = wf.getnchannels()
             sw = wf.getsampwidth()
@@ -373,7 +349,26 @@ class WavePackBuilder:
         if not name:
             short_name = Path(wav_path).stem[:8].encode('ascii').ljust(8, b'\x00')
 
-        # flags 编码：bit0=melodic/percussion, bit2~3=poly_mode, bit4~7=max_same-1
+        self.samples.append({
+            'data_offset': data_offset,
+            'data_size': len(pcm),
+            'sample_rate': fr,
+            'root_note': root_note,
+            'loop_start': loop_start,
+            'loop_end': loop_end,
+            'channels': 1,
+            'bits': 16,
+            'name': short_name,
+        })
+
+        self.pcm_data += pcm
+        return sample_idx
+
+    def add_zone(self, sample_idx, min_note, max_note,
+                 min_vel=0, max_vel=127, flags=None,
+                 poly_mode="multi", max_same_note_voices=2,
+                 adsr=(5, 1500, 0, 120), pitch_cents=0):
+        """绑定一个 Sample 到指定 note/velocity 范围。"""
         if flags is None:
             if poly_mode == "multi":
                 mode_bit = 0x04
@@ -387,22 +382,9 @@ class WavePackBuilder:
             max_same = max(1, min(16, max_same_note_voices)) - 1
             flags = melodic_bit | mode_bit | (max_same << 4)
 
-        self.samples.append({
-            'data_offset': data_offset,
-            'data_size': len(pcm),
-            'sample_rate': fr,
-            'root_note': root_note,
-            'loop_start': loop_start,
-            'loop_end': loop_end,
-            'channels': 1,
-            'bits': 16,
-            'name': short_name,
-        })
-
         self.zones.append({
             'zone_id': len(self.zones),
             'sample_idx': sample_idx,
-            'root_note': root_note,
             'min_note': min_note,
             'max_note': max_note,
             'min_vel': min_vel,
@@ -417,9 +399,6 @@ class WavePackBuilder:
             'filter_resonance': 0,
             'reverb_send': 0,
         })
-
-        self.pcm_data += pcm
-        return sample_idx
 
     def build(self, output_path):
         header_size = 64
@@ -449,9 +428,9 @@ class WavePackBuilder:
             # Zones
             for z in self.zones:
                 f.write(struct.pack('<BBBBBBBB',
-                                    z['zone_id'], z['sample_idx'], z['root_note'],
+                                    z['zone_id'], z['sample_idx'],
                                     z['min_note'], z['max_note'], z['min_vel'], z['max_vel'],
-                                    z['flags']))
+                                    z['flags'], 0))  # reserved0
                 f.write(struct.pack('<HHHHhHHH',
                                     z['attack_ms'], z['decay_ms'], z['sustain_level'], z['release_ms'],
                                     z['pitch_cents'], z['filter_cutoff'], z['filter_resonance'],
@@ -476,18 +455,27 @@ class WavePackBuilder:
 # 使用示例
 builder = WavePackBuilder(sample_rate=44100)
 
+# 注册钢琴采样
+c2 = builder.add_sample("piano_c2.wav", root_note=36)
+c4 = builder.add_sample("piano_c4.wav", root_note=60)
+c6 = builder.add_sample("piano_c6.wav", root_note=84)
+
 # 钢琴：multi 模式，最多 2 个同音
-builder.add_zone("piano_c2.wav", 36, 0, 43, min_vel=0, max_vel=127,
+builder.add_zone(c2, 0, 43,  min_vel=0, max_vel=127,
                  poly_mode="multi", max_same_note_voices=2)
-builder.add_zone("piano_c4.wav", 60, 44, 67, min_vel=0, max_vel=127,
+builder.add_zone(c4, 44, 67, min_vel=0, max_vel=127,
                  poly_mode="multi", max_same_note_voices=2)
-builder.add_zone("piano_c6.wav", 84, 68, 96, min_vel=0, max_vel=127,
+builder.add_zone(c6, 68, 96, min_vel=0, max_vel=127,
                  poly_mode="multi", max_same_note_voices=2)
 
 # 鼓组：retrigger 模式
-builder.add_zone("kick.wav",    36, 36, 36, poly_mode="retrigger")
-builder.add_zone("snare.wav",   38, 38, 38, poly_mode="retrigger")
-builder.add_zone("hihat_c.wav", 42, 42, 42, poly_mode="retrigger")
+kick   = builder.add_sample("kick.wav",   root_note=36)
+snare  = builder.add_sample("snare.wav",  root_note=38)
+hat_c  = builder.add_sample("hihat_c.wav", root_note=42)
+
+builder.add_zone(kick,  36, 36, poly_mode="retrigger")
+builder.add_zone(snare, 38, 38, poly_mode="retrigger")
+builder.add_zone(hat_c, 42, 42, poly_mode="retrigger")
 
 builder.build("piano_kit.wavepack")
 ```
@@ -536,15 +524,16 @@ def generate_cent_ratio_lut(path="cent_ratio_lut.h"):
 ## 5. 校验清单（上位机生成后必须检查）
 
 1. `magic` 为 `"WAVEPACK"`。
-2. `version` 为 `0x0100`。
+2. `version` 为 `0x0101`。
 3. `num_zones > 0` 且 `num_samples > 0`。
 4. 每个 Zone 的 `sample_idx < num_samples`。
 5. 每个 Zone 的 `min_note <= max_note` 且 `min_vel <= max_vel`。
 6. 每个 Sample 的 `data_offset + data_size <= data_size_total`。
 7. 每个 Sample 的 `data_size` 为偶数。
 8. `data_offset` 按 4096 对齐。
-9. 对于 percussion Zone：`min_note == max_note == root_note`。
-10. 对于 melodic Zone：`min_note < max_note` 且 `root_note` 在范围内。
+9. 对于 percussion Zone：`min_note == max_note`。
+10. 对于 melodic Zone：`min_note < max_note`。
+11. 不同 Zone 的 `note` 范围不允许重叠。
 11. Zone `flags` 的 bit2~3 必须为 0x00、0x04 或 0x08 之一。
 12. Zone `flags` 的 bit4~7 为 `max_same_note_voices - 1`，打包器应确保该值符合乐器特性（如钢琴 1~2，鼓 0）。
 
@@ -562,6 +551,13 @@ def generate_cent_ratio_lut(path="cent_ratio_lut.h"):
 ---
 
 ## 7. 附录：版本变更
+
+### v1.1（2026-07-10）
+
+- 二进制 `version` 字段升级为 `0x0101`。
+- **删除 `WavePackZone.root_note` 字段**：Zone 查找仅由 `min_note/max_note` 与 `min_vel/max_vel` 决定。
+- **Pitch 根音唯一来源为 `WavePackSample.root_note`**：Melodic Zone 按目标 note 对 Sample 做 pitch shift；Percussion Zone 固定按 `Sample.root_note` 播放。
+- 约束前提：不同 Zone 的 `note` 范围不允许重叠；一个 Zone 绑定一个 Sample。
 
 ### v1.0（2026-07-08）
 

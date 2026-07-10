@@ -36,8 +36,8 @@ class ZoneListPanel(QGroupBox):
 
         self._table = QTableWidget()
         self._table.setMinimumHeight(300)
-        self._table.setColumnCount(7)
-        self._table.setHorizontalHeaderLabels(["名称", "音源采样", "根音", "Note 范围", "Vel 范围", "模式", "校验"])
+        self._table.setColumnCount(6)
+        self._table.setHorizontalHeaderLabels(["名称", "音源采样", "Note 范围", "Vel 范围", "模式", "校验"])
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -46,7 +46,7 @@ class ZoneListPanel(QGroupBox):
         self._table.itemSelectionChanged.connect(self._emit_selection)
         self._table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_context_menu)
-        for col in range(7):
+        for col in range(6):
             self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         layout.addWidget(self._table)
@@ -115,10 +115,9 @@ class ZoneListPanel(QGroupBox):
                 sample = self._get_sample(zone.sample_id)
                 sample_name = sample.name if sample else "(丢失)"
                 self._table.setItem(row, 1, QTableWidgetItem(sample_name))
-                self._table.setItem(row, 2, QTableWidgetItem(str(zone.root_note)))
-                self._table.setItem(row, 3, QTableWidgetItem(f"{zone.min_note}-{zone.max_note}"))
-                self._table.setItem(row, 4, QTableWidgetItem(f"{zone.min_vel}-{zone.max_vel}"))
-                self._table.setItem(row, 5, QTableWidgetItem(zone.poly_mode))
+                self._table.setItem(row, 2, QTableWidgetItem(f"{zone.min_note}-{zone.max_note}"))
+                self._table.setItem(row, 3, QTableWidgetItem(f"{zone.min_vel}-{zone.max_vel}"))
+                self._table.setItem(row, 4, QTableWidgetItem(zone.poly_mode))
 
                 errs = zone.validate()
                 status_item = QTableWidgetItem("OK" if not errs else "错误")
@@ -127,7 +126,7 @@ class ZoneListPanel(QGroupBox):
                     status_item.setToolTip("\n".join(errs))
                 else:
                     status_item.setForeground(Qt.green)
-                self._table.setItem(row, 6, status_item)
+                self._table.setItem(row, 5, status_item)
 
             if selected_id is not None:
                 self._select_zone(selected_id)
@@ -177,13 +176,12 @@ class ZoneListPanel(QGroupBox):
         elif action == delete_action:
             self._on_remove()
 
-    def _next_note_range(self) -> tuple[int, int, int]:
-        """计算新建 Zone 的默认 note 范围与根音：从 0 开始，默认一个八度，后续接在上一个 Zone 结尾。"""
+    def _next_note_range(self) -> tuple[int, int]:
+        """计算新建 Zone 的默认 note 范围：从 0 开始，默认一个八度，后续接在上一个 Zone 结尾。"""
         if not self._project or not self._project.zones:
             min_note = 0
             max_note = min(127, min_note + 11)
-            root = min(127, min_note + 6)
-            return root, min_note, max_note
+            return min_note, max_note
 
         last_max = max(z.max_note for z in self._project.zones)
         min_note = min(127, last_max + 1)
@@ -192,8 +190,7 @@ class ZoneListPanel(QGroupBox):
             # 剩余空间不足一个八度时回绕到 0
             min_note = 0
             max_note = min(127, 11)
-        root = min(127, min_note + 6)
-        return root, min_note, max_note
+        return min_note, max_note
 
     def _on_add(self) -> None:
         if self._project is None:
@@ -202,7 +199,7 @@ class ZoneListPanel(QGroupBox):
             QMessageBox.information(self, "提示", "请先导入 WAV 音源")
             return
 
-        root, min_note, max_note = self._next_note_range()
+        min_note, max_note = self._next_note_range()
         # 优先使用当前选中的采样；若未选中或已失效，则回退到最后一个采样
         sample = None
         if self._current_sample_id is not None:
@@ -212,7 +209,6 @@ class ZoneListPanel(QGroupBox):
         zone = ZoneEntry(
             sample_id=sample.id,
             name=f"Zone {len(self._project.zones) + 1}",
-            root_note=root,
             min_note=min_note,
             max_note=max_note,
             min_vel=0,

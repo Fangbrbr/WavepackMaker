@@ -61,19 +61,15 @@ def test_sample_from_wav():
 
 
 def test_zone_validation():
-    zone = ZoneEntry(root_note=60, min_note=55, max_note=72, poly_mode="multi")
+    zone = ZoneEntry(min_note=55, max_note=72, poly_mode="multi")
     assert not zone.validate()
 
-    # 旋律 Zone 要求根音在范围内
-    zone_bad = ZoneEntry(
-        root_note=80, min_note=55, max_note=72, poly_mode="multi"
-    )
+    # 旋律 Zone 要求 min_note < max_note
+    zone_bad = ZoneEntry(min_note=72, max_note=55, poly_mode="multi")
     assert zone_bad.validate()
 
-    # 打击乐 Zone 要求 min == max == root
-    zone_perc = ZoneEntry(
-        root_note=36, min_note=36, max_note=36, poly_mode="retrigger"
-    )
+    # 打击乐 Zone 要求 min == max
+    zone_perc = ZoneEntry(min_note=36, max_note=36, poly_mode="retrigger")
     assert not zone_perc.validate()
 
 
@@ -91,7 +87,6 @@ def test_project_io_and_export(tmp_path: Path = None):
     zone = ZoneEntry(
         sample_id=sample.id,
         name="C4 Zone",
-        root_note=60,
         min_note=55,
         max_note=67,
         min_vel=0,
@@ -134,41 +129,37 @@ def test_wavepack_header_version():
         _make_wav(wav, freq=100)
         out = Path(tmp) / "kick.wavepack"
         builder = WavePackBuilder()
-        builder.add_zone(wav, root_note=36, min_note=36, max_note=36, poly_mode="retrigger")
+        builder.add_zone(wav, min_note=36, max_note=36, poly_mode="retrigger", root_note=36)
         builder.build(out)
         with open(out, "rb") as f:
             magic = f.read(8)
             version = struct.unpack("<H", f.read(2))[0]
         assert magic == b"WAVEPACK"
-        assert version == 0x0100
+        assert version == 0x0101
 
 
-def test_sample_root_note_sync():
-    """验证导入 WAV 后，Sample.root_note 能根据 Zone.root_note 自动修正并写入二进制。"""
+def test_sample_root_note_write():
+    """验证 Sample.root_note 直接写入二进制 Sample Entry。"""
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         wav = tmp / "a0.wav"
         _make_wav(wav, freq=55.0)
 
-        project = Project(metadata=ProjectMetadata(name="Root Sync Test"))
+        project = Project(metadata=ProjectMetadata(name="Root Write Test"))
         sample = SampleEntry.from_wav(wav)
         assert sample.root_note == 60  # 默认根音
+        sample.root_note = 21
         project.add_sample(sample)
 
         zone = ZoneEntry(
             sample_id=sample.id,
             name="A0 Zone",
-            root_note=21,
             min_note=0,
             max_note=27,
         )
         project.add_zone(zone)
 
-        # 同步后 Sample.root_note 应修正为 Zone.root_note
-        project.sync_sample_root_notes()
-        assert sample.root_note == 21
-
-        # 打包后二进制 Sample Entry 的 root_note 也必须是 21
+        # 打包后二进制 Sample Entry 的 root_note 必须是 21
         out = tmp / "test.wavepack"
         WavePackBuilder.from_project(project).build(out)
         validator = WavePackValidator(out)
@@ -182,5 +173,5 @@ if __name__ == "__main__":
     test_zone_validation()
     test_project_io_and_export()
     test_wavepack_header_version()
-    test_sample_root_note_sync()
+    test_sample_root_note_write()
     print("All tests passed.")

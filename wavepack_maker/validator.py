@@ -23,6 +23,7 @@ class WavePackValidator:
         self.header: dict = {}
         self.zones: List[dict] = []
         self.samples: List[dict] = []
+        self._zone_reserved0: List[int] = []
 
     def _read_header(self) -> bool:
         """读取并校验 Header，返回是否继续后续校验。"""
@@ -59,8 +60,8 @@ class WavePackValidator:
             "sample_rate": sample_rate,
         }
 
-        if version != 0x0100:
-            self.errors.append(f"version 错误: 0x{version:04X}，应为 0x0100")
+        if version != 0x0101:
+            self.errors.append(f"version 错误: 0x{version:04X}，应为 0x0101")
         if num_zones == 0:
             self.errors.append("num_zones 必须大于 0")
         if num_samples == 0:
@@ -98,12 +99,12 @@ class WavePackValidator:
             (
                 zone_id,
                 sample_idx,
-                root_note,
                 min_note,
                 max_note,
                 min_vel,
                 max_vel,
                 flags,
+                reserved0,
                 attack_ms,
                 decay_ms,
                 sustain_level,
@@ -120,7 +121,6 @@ class WavePackValidator:
                 {
                     "zone_id": zone_id,
                     "sample_idx": sample_idx,
-                    "root_note": root_note,
                     "min_note": min_note,
                     "max_note": max_note,
                     "min_vel": min_vel,
@@ -133,6 +133,7 @@ class WavePackValidator:
                     "pitch_cents": pitch_cents,
                 }
             )
+            self._zone_reserved0.append(reserved0)
 
     def _read_samples(self) -> None:
         """读取 Sample Directory。"""
@@ -191,18 +192,14 @@ class WavePackValidator:
 
             is_percussion = (z["flags"] & 0x01) == 0
             if is_percussion:
-                if not (z["min_note"] == z["max_note"] == z["root_note"]):
+                if z["min_note"] != z["max_note"]:
                     self.errors.append(
-                        f"{prefix}: percussion zone 要求 min_note == max_note == root_note"
+                        f"{prefix}: percussion zone 要求 min_note == max_note"
                     )
             else:
                 if z["min_note"] >= z["max_note"]:
                     self.errors.append(
                         f"{prefix}: melodic zone 要求 min_note < max_note"
-                    )
-                if not (z["min_note"] <= z["root_note"] <= z["max_note"]):
-                    self.errors.append(
-                        f"{prefix}: melodic zone 要求 root_note 在 [min_note, max_note] 内"
                     )
 
             if not (0 <= z["sustain_level"] <= 255):

@@ -78,12 +78,6 @@ class ZoneEditor(QGroupBox):
         self._sample_combo = QComboBox()
         self._sample_combo.currentIndexChanged.connect(self._on_sample_changed)
 
-        # Zone 根音
-        self._root_spin = QSpinBox()
-        self._root_spin.setRange(0, 127)
-        self._root_spin.setToolTip("Zone 的根音；旋律模式下用于命中选择和 pitch shift 计算")
-        self._root_spin.valueChanged.connect(self._on_root_changed)
-
         # 采样根音（写入 .wavepack Sample Entry，供下位机计算播放速度基准）
         self._sample_root_spin = QSpinBox()
         self._sample_root_spin.setRange(0, 127)
@@ -157,7 +151,6 @@ class ZoneEditor(QGroupBox):
 
         form.addRow("名称:", self._name_edit)
         form.addRow("音源采样:", self._sample_combo)
-        form.addRow("Zone 根音:", self._root_spin)
         form.addRow("采样根音:", self._sample_root_spin)
         form.addRow("Note 范围:", note_range_layout)
         form.addRow("Velocity 范围:", vel_range_layout)
@@ -197,7 +190,6 @@ class ZoneEditor(QGroupBox):
             self.blockSignals(True)
             self._name_edit.clear()
             self._sample_combo.setCurrentIndex(-1)
-            self._root_spin.setValue(60)
             self._sample_root_spin.setValue(60)
             self._note_range_slider.set_range(0, 127)
             self._vel_range_slider.set_range(0, 127)
@@ -220,9 +212,8 @@ class ZoneEditor(QGroupBox):
         index = self._sample_combo.findData(zone.sample_id)
         if index >= 0:
             self._sample_combo.setCurrentIndex(index)
-        self._root_spin.setValue(zone.root_note)
         sample = self._project.get_sample(zone.sample_id) if self._project else None
-        self._sample_root_spin.setValue(sample.root_note if sample else zone.root_note)
+        self._sample_root_spin.setValue(sample.root_note if sample else 60)
         self._note_range_slider.set_range(zone.min_note, zone.max_note)
         self._vel_range_slider.set_range(zone.min_vel, zone.max_vel)
         self._poly_mode_combo.setCurrentText(zone.poly_mode)
@@ -269,24 +260,6 @@ class ZoneEditor(QGroupBox):
                 self._sample_root_spin.blockSignals(False)
         self._on_field_changed()
 
-    def _on_root_changed(self, value: int) -> None:
-        if self._zone is None or self._loading_zone:
-            return
-        # 根音必须在 [min_note, max_note] 范围内
-        value = max(self._zone.min_note, min(self._zone.max_note, value))
-        self._root_spin.blockSignals(True)
-        self._root_spin.setValue(value)
-        self._root_spin.blockSignals(False)
-        self._zone.root_note = value
-        # 同步更新采样根音（当前设计：一个 Zone 对应一个 Sample）
-        sample = self._project.get_sample(self._zone.sample_id) if self._project else None
-        if sample is not None:
-            sample.root_note = value
-            self._sample_root_spin.blockSignals(True)
-            self._sample_root_spin.setValue(value)
-            self._sample_root_spin.blockSignals(False)
-        self._on_field_changed()
-
     def _on_sample_root_changed(self, value: int) -> None:
         if self._zone is None or self._loading_zone:
             return
@@ -300,8 +273,6 @@ class ZoneEditor(QGroupBox):
             return
         self._zone.min_note = low
         self._zone.max_note = high
-        # 根音同步到范围内
-        self._clamp_root()
         self._update_range_labels()
         self._on_field_changed()
 
@@ -312,17 +283,6 @@ class ZoneEditor(QGroupBox):
         self._zone.max_vel = high
         self._update_range_labels()
         self._on_field_changed()
-
-    def _clamp_root(self) -> None:
-        """将根音限制到 [min_note, max_note] 范围内."""
-        if self._zone is None or self._loading_zone:
-            return
-        new_root = max(self._zone.min_note, min(self._zone.max_note, self._zone.root_note))
-        if new_root != self._zone.root_note:
-            self._root_spin.blockSignals(True)
-            self._root_spin.setValue(new_root)
-            self._root_spin.blockSignals(False)
-            self._zone.root_note = new_root
 
     def _update_range_labels(self) -> None:
         if self._zone is None:

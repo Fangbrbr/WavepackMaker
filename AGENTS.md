@@ -48,10 +48,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build_exe.ps1
 - Loop 标记保存在 `SampleEntry`（`loop_start`、`loop_end`）而非 Zone。
 - Zone 编辑通过信号回调实时同步到 `ZoneListPanel`，使用 `_loading_zone` 标志避免循环触发。
 - 钢琴键盘仅显示 88 键（A0-C8，MIDI note 21-108）。
-- **Zone.root_note 与 Sample.root_note 职责不同**：
+- **采样根音是播放速度的唯一基准**：
   - `Sample.root_note` 是 WAV 真实录制的 MIDI 音高，写入二进制 Sample Entry，供下位机计算播放速度。
-  - `Zone.root_note` 用于 Zone 命中选择与 pitch shift 计算。
-  - 一对一引用时，`Project.sync_sample_root_notes()` 会把 Sample.root_note 同步为 Zone.root_note。
+  - v1.1 协议已删除 `Zone.root_note`；Zone 仅负责 note/velocity 命中映射。
 - 版本号来自 git 历史：优先使用 tag，无 tag 时使用 commit 短 hash。
 
 ## 版本与打包

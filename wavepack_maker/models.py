@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from .builder import DEFAULT_ADSR, WAVEPACK_VERSION
+from .builder import DEFAULT_ADSR
 
 
 def _now_iso() -> str:
@@ -173,7 +173,6 @@ class ZoneEntry:
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     sample_id: str = ""
     name: str = ""
-    root_note: int = 60
     min_note: int = 60
     max_note: int = 60
     min_vel: int = 0
@@ -192,7 +191,6 @@ class ZoneEntry:
             "id": self.id,
             "sample_id": self.sample_id,
             "name": self.name,
-            "root_note": self.root_note,
             "min_note": self.min_note,
             "max_note": self.max_note,
             "min_vel": self.min_vel,
@@ -213,7 +211,6 @@ class ZoneEntry:
             id=d.get("id", str(uuid.uuid4())[:8]),
             sample_id=d.get("sample_id", ""),
             name=d.get("name", ""),
-            root_note=int(d.get("root_note", 60)),
             min_note=int(d.get("min_note", 60)),
             max_note=int(d.get("max_note", 60)),
             min_vel=int(d.get("min_vel", 0)),
@@ -247,13 +244,11 @@ class ZoneEntry:
 
         is_percussion = (flags & 0x01) == 0
         if is_percussion:
-            if not (self.min_note == self.max_note == self.root_note):
-                errs.append("打击乐 Zone 要求根音=最低音=最高音")
+            if self.min_note != self.max_note:
+                errs.append("打击乐 Zone 要求最低音 = 最高音")
         else:
             if self.min_note >= self.max_note:
                 errs.append("旋律 Zone 要求最低音 < 最高音")
-            if not (self.min_note <= self.root_note <= self.max_note):
-                errs.append("旋律 Zone 根音必须在音域范围内")
         return errs
 
     def encoded_flags(self) -> int:
@@ -331,21 +326,11 @@ class Project:
         self.metadata.touch_updated()
 
     def sync_sample_root_notes(self) -> bool:
-        """根据一对一引用的 Zone.root_note 修正 Sample.root_note。
+        """v1.1 协议已删除 Zone.root_note，Sample.root_note 由 UI 直接维护。
 
-        仅当某个 Sample 只被一个 Zone 引用时，才将其 root_note 同步为 Zone.root_note。
-        多个 Zone 共用同一 Sample 时保持原值，避免冲突。
-        返回是否发生变更。
+        保留本方法仅用于兼容旧工程加载路径，实际不再执行同步。
         """
-        changed = False
-        for sample in self.samples:
-            referring = [z for z in self.zones if z.sample_id == sample.id]
-            if len(referring) == 1 and sample.root_note != referring[0].root_note:
-                sample.root_note = referring[0].root_note
-                changed = True
-        if changed:
-            self.metadata.touch_updated()
-        return changed
+        return False
 
     def sync_samples_with_directory(self, project_dir: Optional[Path | str] = None) -> bool:
         """让 project.samples 与 project_dir/samples 目录保持双向同步。
@@ -434,11 +419,10 @@ class Project:
         zone = self.get_zone_for_sample(sample.id)
         if zone is not None:
             return zone
-        # 默认创建旋律 Zone，根音取 sample.root_note，音域向两侧扩展 6 个半音
+        # 默认创建旋律 Zone，音域以 sample.root_note 为中心向两侧扩展 6 个半音
         zone = ZoneEntry(
             sample_id=sample.id,
             name=sample.name,
-            root_note=sample.root_note,
             min_note=max(0, sample.root_note - 6),
             max_note=min(127, sample.root_note + 6),
         )

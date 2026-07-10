@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, List, Tuple
 if TYPE_CHECKING:
     from .models import Project
 
-WAVEPACK_VERSION = 0x0100
+WAVEPACK_VERSION = 0x0101
 
 # Zone flags
 ZONE_FLAG_PERCUSSION = 0x00
@@ -126,7 +126,6 @@ class WavePackBuilder:
     def add_zone(
         self,
         wav_path: str | Path,
-        root_note: int,
         min_note: int,
         max_note: int,
         min_vel: int = 0,
@@ -139,6 +138,7 @@ class WavePackBuilder:
         loop_start: int = 0,
         loop_end: int = 0,
         name: str = "",
+        root_note: int = 60,
     ) -> int:
         """添加一个 Zone 并返回其 sample_idx。"""
         sample_idx = self.add_sample(
@@ -159,7 +159,6 @@ class WavePackBuilder:
             {
                 "zone_id": len(self.zones),
                 "sample_idx": sample_idx,
-                "root_note": root_note,
                 "min_note": min_note,
                 "max_note": max_note,
                 "min_vel": min_vel,
@@ -190,7 +189,6 @@ class WavePackBuilder:
 
         return self.add_zone(
             wav_path=file_path,
-            root_note=int(zone_cfg["root_note"]),
             min_note=int(zone_cfg["min_note"]),
             max_note=int(zone_cfg["max_note"]),
             min_vel=int(zone_cfg.get("min_vel", 0)),
@@ -203,6 +201,7 @@ class WavePackBuilder:
             loop_start=int(zone_cfg.get("loop_start", 0)),
             loop_end=int(zone_cfg.get("loop_end", 0)),
             name=zone_cfg.get("name", ""),
+            root_note=int(zone_cfg.get("root_note", 60)),
         )
 
     def load_json(self, json_path: str | Path) -> None:
@@ -258,12 +257,12 @@ class WavePackBuilder:
                         "<BBBBBBBB",
                         z["zone_id"],
                         z["sample_idx"],
-                        z["root_note"],
                         z["min_note"],
                         z["max_note"],
                         z["min_vel"],
                         z["max_vel"],
                         z["flags"],
+                        0,  # reserved0
                     )
                 )
                 f.write(
@@ -347,7 +346,6 @@ class WavePackBuilder:
                 {
                     "zone_id": len(builder.zones),
                     "sample_idx": sample_idx,
-                    "root_note": zone.root_note,
                     "min_note": zone.min_note,
                     "max_note": zone.max_note,
                     "min_vel": zone.min_vel,
