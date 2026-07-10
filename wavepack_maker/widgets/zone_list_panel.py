@@ -28,6 +28,7 @@ class ZoneListPanel(QGroupBox):
         super().__init__("Zone 列表", parent)
         self._project: Optional[Project] = None
         self._on_selection_changed: Optional[Callable[[Optional[ZoneEntry]], None]] = None
+        self._current_sample_id: Optional[str] = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -77,7 +78,13 @@ class ZoneListPanel(QGroupBox):
 
     def set_project(self, project: Project) -> None:
         self._project = project
+        if project is not None and project.samples and self._current_sample_id is None:
+            self._current_sample_id = project.samples[0].id
         self.refresh()
+
+    def set_current_sample_id(self, sample_id: Optional[str]) -> None:
+        """设置当前在采样清单中选中的 Sample，添加 Zone 时会优先使用它。"""
+        self._current_sample_id = sample_id
 
     def set_on_selection_changed(self, callback: Callable[[Optional[ZoneEntry]], None]) -> None:
         self._on_selection_changed = callback
@@ -171,20 +178,21 @@ class ZoneListPanel(QGroupBox):
             self._on_remove()
 
     def _next_note_range(self) -> tuple[int, int, int]:
-        """计算新建 Zone 的默认 note 范围与根音：接在上一个 Zone 后面，默认两个八度。"""
+        """计算新建 Zone 的默认 note 范围与根音：从 0 开始，默认一个八度，后续接在上一个 Zone 结尾。"""
         if not self._project or not self._project.zones:
-            root = 60
-            min_note = max(0, root - 12)
-            max_note = min(127, root + 12)
+            min_note = 0
+            max_note = min(127, min_note + 11)
+            root = min(127, min_note + 6)
             return root, min_note, max_note
 
         last_max = max(z.max_note for z in self._project.zones)
         min_note = min(127, last_max + 1)
-        max_note = min(127, min_note + 24)
-        if min_note > 127 - 12:
+        max_note = min(127, min_note + 11)
+        if min_note > 127 - 11:
+            # 剩余空间不足一个八度时回绕到 0
             min_note = 0
-            max_note = 24
-        root = min(127, min_note + 12)
+            max_note = min(127, 11)
+        root = min(127, min_note + 6)
         return root, min_note, max_note
 
     def _on_add(self) -> None:
@@ -195,7 +203,12 @@ class ZoneListPanel(QGroupBox):
             return
 
         root, min_note, max_note = self._next_note_range()
-        sample = self._project.samples[-1]
+        # 优先使用当前选中的采样；若未选中或已失效，则回退到最后一个采样
+        sample = None
+        if self._current_sample_id is not None:
+            sample = self._project.get_sample(self._current_sample_id)
+        if sample is None:
+            sample = self._project.samples[-1]
         zone = ZoneEntry(
             sample_id=sample.id,
             name=f"Zone {len(self._project.zones) + 1}",

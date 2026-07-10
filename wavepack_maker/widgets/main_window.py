@@ -388,9 +388,11 @@ class MainWindow(QMainWindow):
             self._waveform_view.load_wav(sample.resolve_path(project_dir))
             self._waveform_view.set_loop_region(sample.loop_start, sample.loop_end)
             self._waveform_view.set_editable(True)
+            self._zone_list_panel.set_current_sample_id(sample.id)
         else:
             self._waveform_view.clear()
             self._waveform_view.set_editable(False)
+            self._zone_list_panel.set_current_sample_id(None)
 
     def _on_zone_selected(self, zone: Optional[ZoneEntry]) -> None:
         project_dir = Path(self._project_file_path).parent if self._project_file_path else None
