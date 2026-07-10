@@ -10,6 +10,9 @@ if (-not (Test-Path $venvPython)) {
     exit 1
 }
 
+Write-Host "生成 logo.ico..."
+& $venvPython ([System.IO.Path]::Combine($PSScriptRoot, "scripts", "build_logo_ico.py"))
+
 Write-Host "生成版本信息..."
 & $venvPython ([System.IO.Path]::Combine($PSScriptRoot, "scripts", "gen_version.py"))
 if ($LASTEXITCODE -ne 0) {
