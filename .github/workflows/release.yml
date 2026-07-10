@@ -31,11 +31,17 @@ jobs:
           uv venv
           uv pip install -r requirements.txt
 
+      - name: Generate assets
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "."
+          .\.venv\Scripts\python.exe scripts\build_logo_ico.py
+          .\.venv\Scripts\python.exe scripts\gen_version.py
+
       - name: Build executable
         shell: pwsh
         run: |
           $env:PYTHONPATH = "."
-          .\.venv\Scripts\python.exe scripts\gen_version.py
           .\.venv\Scripts\python.exe -m PyInstaller wavepack_maker.spec --noconfirm --clean
 
       - name: Rename artifact with version
