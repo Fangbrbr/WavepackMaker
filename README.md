@@ -21,11 +21,12 @@
   - 显示采样率 / 通道 / 位深
   - 采样裁剪：框选拖尾音并删除，减小音色包体积
 - **Zone 编辑**：
-  - 指定根音、Note 范围、Velocity 范围
+  - 指定 Zone 根音、Note 范围、Velocity 范围
   - 复音模式：retrigger / multi / legato
   - 同音最大 Voice 数
   - ADSR 包络编辑器
   - 音高微调（-100 ~ +100 cents）
+  - **采样根音自动同步**：导入 WAV 后，若 Sample 只被一个 Zone 引用，其根音会自动与 Zone 根音对齐，确保下位机正确计算播放速度
 - **可视化**：
   - 波形显示 + 循环区间框选 + 底部时间轴
   - 88 键钢琴卷帘展示所有 Zone 的 Note 映射
@@ -36,6 +37,22 @@
   - Windows MIDI 输入设备预览
   - 所有预览均基于当前 Zone 设计并按根音差变速播放
 - **导出与校验**：一键导出 `.wavepack` 到 `output/` 目录，自动通过结构校验。
+
+## Zone 根音 vs 采样根音
+
+这是两个不同职责的字段，都参与下位机播放速度计算：
+
+| 字段 | 所属 | 含义 | 用途 |
+|---|---|---|---|
+| `Zone.root_note` | Zone | 该 Zone 的代表音高 | 用于多 Zone 候选时选择"最近根音"，以及旋律模式下计算 pitch shift |
+| `Sample.root_note` | Sample | 该 WAV 采样真实录制的 MIDI 音高 | 写入二进制 Sample Entry，下位机用它计算目标 note 与采样原始音高的半音差 |
+
+**简单理解**：
+- 你录制了一个 A0（MIDI 21）的钢琴采样 → `Sample.root_note = 21`
+- 这个采样覆盖 note 0~27 → `Zone.root_note = 21`
+- 下位机收到 MIDI note 33 时，知道要把该采样提高 12 个半音播放
+
+WavePack Maker 会自动维护一对一关系：当 Sample 只被一个 Zone 引用时，修改 Zone 根音会自动同步 Sample 根音。
 
 ## 工程目录约定
 

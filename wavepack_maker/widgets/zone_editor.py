@@ -78,11 +78,17 @@ class ZoneEditor(QGroupBox):
         self._sample_combo = QComboBox()
         self._sample_combo.currentIndexChanged.connect(self._on_sample_changed)
 
-        # 根音
+        # Zone 根音
         self._root_spin = QSpinBox()
         self._root_spin.setRange(0, 127)
-        self._root_spin.setToolTip("该 Zone 音源采样的原始 MIDI 音高；旋律模式下用于计算 pitch shift")
+        self._root_spin.setToolTip("Zone 的根音；旋律模式下用于命中选择和 pitch shift 计算")
         self._root_spin.valueChanged.connect(self._on_root_changed)
+
+        # 采样根音（写入 .wavepack Sample Entry，供下位机计算播放速度基准）
+        self._sample_root_spin = QSpinBox()
+        self._sample_root_spin.setRange(0, 127)
+        self._sample_root_spin.setToolTip("该 WAV 采样真实录制的 MIDI 音高，会写入二进制 Sample Entry")
+        self._sample_root_spin.valueChanged.connect(self._on_sample_root_changed)
 
         # Note 范围：双头滑块 + 标签
         self._note_range_slider = RangeSlider(0, 127)
@@ -151,7 +157,8 @@ class ZoneEditor(QGroupBox):
 
         form.addRow("名称:", self._name_edit)
         form.addRow("音源采样:", self._sample_combo)
-        form.addRow("根音 (Root):", self._root_spin)
+        form.addRow("Zone 根音:", self._root_spin)
+        form.addRow("采样根音:", self._sample_root_spin)
         form.addRow("Note 范围:", note_range_layout)
         form.addRow("Velocity 范围:", vel_range_layout)
         form.addRow("复音模式:", self._poly_mode_combo)
@@ -191,6 +198,7 @@ class ZoneEditor(QGroupBox):
             self._name_edit.clear()
             self._sample_combo.setCurrentIndex(-1)
             self._root_spin.setValue(60)
+            self._sample_root_spin.setValue(60)
             self._note_range_slider.set_range(0, 127)
             self._vel_range_slider.set_range(0, 127)
             self._poly_mode_combo.setCurrentText("retrigger")
@@ -213,6 +221,8 @@ class ZoneEditor(QGroupBox):
         if index >= 0:
             self._sample_combo.setCurrentIndex(index)
         self._root_spin.setValue(zone.root_note)
+        sample = self._project.get_sample(zone.sample_id) if self._project else None
+        self._sample_root_spin.setValue(sample.root_note if sample else zone.root_note)
         self._note_range_slider.set_range(zone.min_note, zone.max_note)
         self._vel_range_slider.set_range(zone.min_vel, zone.max_vel)
         self._poly_mode_combo.setCurrentText(zone.poly_mode)
@@ -252,6 +262,11 @@ class ZoneEditor(QGroupBox):
         sample_id = self._sample_combo.currentData()
         if sample_id:
             self._zone.sample_id = sample_id
+            sample = self._project.get_sample(sample_id) if self._project else None
+            if sample is not None:
+                self._sample_root_spin.blockSignals(True)
+                self._sample_root_spin.setValue(sample.root_note)
+                self._sample_root_spin.blockSignals(False)
         self._on_field_changed()
 
     def _on_root_changed(self, value: int) -> None:
@@ -263,6 +278,21 @@ class ZoneEditor(QGroupBox):
         self._root_spin.setValue(value)
         self._root_spin.blockSignals(False)
         self._zone.root_note = value
+        # 同步更新采样根音（当前设计：一个 Zone 对应一个 Sample）
+        sample = self._project.get_sample(self._zone.sample_id) if self._project else None
+        if sample is not None:
+            sample.root_note = value
+            self._sample_root_spin.blockSignals(True)
+            self._sample_root_spin.setValue(value)
+            self._sample_root_spin.blockSignals(False)
+        self._on_field_changed()
+
+    def _on_sample_root_changed(self, value: int) -> None:
+        if self._zone is None or self._loading_zone:
+            return
+        sample = self._project.get_sample(self._zone.sample_id) if self._project else None
+        if sample is not None:
+            sample.root_note = value
         self._on_field_changed()
 
     def _on_note_range_changed(self, low: int, high: int) -> None:

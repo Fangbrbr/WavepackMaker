@@ -330,6 +330,23 @@ class Project:
         self.zones = [z for z in self.zones if z.sample_id != sample_id]
         self.metadata.touch_updated()
 
+    def sync_sample_root_notes(self) -> bool:
+        """根据一对一引用的 Zone.root_note 修正 Sample.root_note。
+
+        仅当某个 Sample 只被一个 Zone 引用时，才将其 root_note 同步为 Zone.root_note。
+        多个 Zone 共用同一 Sample 时保持原值，避免冲突。
+        返回是否发生变更。
+        """
+        changed = False
+        for sample in self.samples:
+            referring = [z for z in self.zones if z.sample_id == sample.id]
+            if len(referring) == 1 and sample.root_note != referring[0].root_note:
+                sample.root_note = referring[0].root_note
+                changed = True
+        if changed:
+            self.metadata.touch_updated()
+        return changed
+
     def sync_samples_with_directory(self, project_dir: Optional[Path | str] = None) -> bool:
         """让 project.samples 与 project_dir/samples 目录保持双向同步。
 

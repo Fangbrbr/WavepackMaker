@@ -143,10 +143,44 @@ def test_wavepack_header_version():
         assert version == 0x0100
 
 
+def test_sample_root_note_sync():
+    """验证导入 WAV 后，Sample.root_note 能根据 Zone.root_note 自动修正并写入二进制。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        wav = tmp / "a0.wav"
+        _make_wav(wav, freq=55.0)
+
+        project = Project(metadata=ProjectMetadata(name="Root Sync Test"))
+        sample = SampleEntry.from_wav(wav)
+        assert sample.root_note == 60  # 默认根音
+        project.add_sample(sample)
+
+        zone = ZoneEntry(
+            sample_id=sample.id,
+            name="A0 Zone",
+            root_note=21,
+            min_note=0,
+            max_note=27,
+        )
+        project.add_zone(zone)
+
+        # 同步后 Sample.root_note 应修正为 Zone.root_note
+        project.sync_sample_root_notes()
+        assert sample.root_note == 21
+
+        # 打包后二进制 Sample Entry 的 root_note 也必须是 21
+        out = tmp / "test.wavepack"
+        WavePackBuilder.from_project(project).build(out)
+        validator = WavePackValidator(out)
+        validator.validate()
+        assert validator.samples[0]["root_note"] == 21
+
+
 if __name__ == "__main__":
     test_project_metadata_roundtrip()
     test_sample_from_wav()
     test_zone_validation()
     test_project_io_and_export()
     test_wavepack_header_version()
+    test_sample_root_note_sync()
     print("All tests passed.")

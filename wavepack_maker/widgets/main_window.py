@@ -335,6 +335,7 @@ class MainWindow(QMainWindow):
     def _bind_project(self) -> None:
         project_dir = Path(self._project_file_path).parent if self._project_file_path else None
         self._project.sync_samples_with_directory(project_dir)
+        self._project.sync_sample_root_notes()
         self._sample_panel.set_project(self._project)
         self._zone_list_panel.set_project(self._project)
         self._zone_editor.set_project(self._project)
