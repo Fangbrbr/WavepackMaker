@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
         self._project = Project()
         self._project_file_path: Optional[str] = None
         self._last_save_state: Optional[dict] = None
-        self._audio_player = AudioPlayer()
+        self._audio_player = AudioPlayer(self)
         self._midi_input = MidiInput(self)
         self._midi_input.note_on.connect(self._on_midi_note_on)
         self._ignore_dirty_once = True  # 首次新建工程不弹保存询问
