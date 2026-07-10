@@ -112,15 +112,15 @@ class PianoRoll(QWidget):
         x = center - black_w // 2
         return QRect(x, 0, black_w, black_h)
 
-    def note_at_x(self, x: int) -> int:
-        """根据 X 坐标返回对应 MIDI note，优先黑键。"""
-        # 先检查黑键
+    def note_at_pos(self, x: int, y: int) -> int:
+        """根据 (x, y) 坐标返回对应 MIDI note；黑键判定严格限制在黑键绘制区域内。"""
+        # 先检查黑键：必须同时满足 x 在黑键横向范围内，且 y 在黑键高度内
         for note in range(self.MIN_NOTE, self.MAX_NOTE + 1):
             if note % 12 in self.BLACK_KEYS:
                 rect = self._black_key_rect(note)
-                if rect.left() <= x <= rect.right():
+                if rect.isValid() and rect.left() <= x <= rect.right() and 0 <= y <= rect.bottom():
                     return note
-        # 再按白键位置
+        # 否则按白键位置
         whites = self._white_key_notes()
         if not whites:
             return self.MIN_NOTE
@@ -196,7 +196,8 @@ class PianoRoll(QWidget):
                 painter.drawRect(self._white_key_rect(self._hover_note))
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        self._hover_note = self.note_at_x(int(event.position().x()))
+        pos = event.position()
+        self._hover_note = self.note_at_pos(int(pos.x()), int(pos.y()))
         self.update()
 
     def leaveEvent(self, event) -> None:  # noqa: N802
@@ -204,7 +205,8 @@ class PianoRoll(QWidget):
         self.update()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
-        note = self.note_at_x(int(event.position().x()))
+        pos = event.position()
+        note = self.note_at_pos(int(pos.x()), int(pos.y()))
         if self.MIN_NOTE <= note <= self.MAX_NOTE:
             self._pressed_note = note
             self.note_clicked.emit(note)
