@@ -35,7 +35,8 @@ class _MixerIODevice(QIODevice):
         if frames <= 0:
             return b""
 
-        mixed = array.array("h", [0] * frames)
+        # 使用 Python int 做中间累加，避免 16-bit array 溢出
+        mixed = [0] * frames
         active: List[_MixerStream] = []
 
         for stream in self._streams:
@@ -58,10 +59,12 @@ class _MixerIODevice(QIODevice):
         self._streams = active
 
         # clip 到 16-bit 范围
-        for i in range(frames):
-            mixed[i] = max(-32768, min(32767, mixed[i]))
+        clipped = array.array(
+            "h",
+            [max(-32768, min(32767, mixed[i])) for i in range(frames)],
+        )
 
-        return mixed.tobytes()
+        return clipped.tobytes()
 
     def bytesAvailable(self) -> int:
         # 让 QAudioSink 始终认为有数据可读；没有 stream 时返回静音。
