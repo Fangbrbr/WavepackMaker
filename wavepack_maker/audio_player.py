@@ -1,22 +1,24 @@
-"""基于 PySide6 QAudioSink 的音频预览封装。"""
+"""基于 PySide6 QMediaPlayer 的音频预览封装。"""
 
 import array
+import tempfile
+import uuid
 import wave
 from pathlib import Path
-from typing import List
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QObject, Signal
-from PySide6.QtMultimedia import QAudio, QAudioFormat, QAudioSink, QMediaDevices
+from PySide6.QtCore import QUrl
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 
 
-class AudioPlayer(QObject):
-    """使用 QAudioSink 播放 WAV，支持按 rate 变速变调。"""
-
-    finished = Signal()
+class AudioPlayer:
+    """包装 QMediaPlayer，通过预重采样实现变速变调播放。"""
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._sinks: List[QAudioSink] = []
+        self._player = QMediaPlayer(parent)
+        self._audio_output = QAudioOutput(parent)
+        self._player.setAudioOutput(self._audio_output)
+        self._audio_output.setVolume(0.8)
+        self._temp_dir = tempfile.TemporaryDirectory()
 
     def play(self, file_path: str | Path, rate: float = 1.0) -> None:
         """播放指定 WAV 文件，rate=1.0 原速，rate=2.0 快一倍/高八度。"""
@@ -39,21 +41,17 @@ class AudioPlayer(QObject):
             rate = 0.05
         pcm = self._resample(raw, rate) if rate != 1.0 else raw
 
-        fmt = QAudioFormat()
-        fmt.setSampleRate(fr)
-        fmt.setChannelCount(1)
-        fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
+        # 生成临时 WAV，让 QMediaPlayer 原速播放重采样后的数据
+        tmp_path = Path(self._temp_dir.name) / f"{uuid.uuid4().hex}.wav"
+        with wave.open(str(tmp_path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(fr)
+            wf.writeframes(pcm)
 
-        media_devices = QMediaDevices(self)
-        device = media_devices.defaultAudioOutput()
-        sink = QAudioSink(device, fmt, self)
-        sink.stateChanged.connect(
-            lambda state, s=sink: self._on_state_changed(state, s)
-        )
-        buf = QBuffer(QByteArray(pcm))
-        buf.open(QIODevice.ReadOnly)
-        sink.start(buf)
-        self._sinks.append(sink)
+        self._player.setSource(QUrl.fromLocalFile(str(tmp_path)))
+        self._audio_output.setVolume(0.8)
+        self._player.play()
 
     @staticmethod
     def _resample(raw: bytes, rate: float) -> bytes:
@@ -76,23 +74,15 @@ class AudioPlayer(QObject):
             new_arr.append(v)
         return new_arr.tobytes()
 
-    def _on_state_changed(self, state: QAudio.State, sink: QAudioSink) -> None:
-        if state in (QAudio.State.IdleState, QAudio.State.StoppedState):
-            if sink in self._sinks:
-                self._sinks.remove(sink)
-            sink.deleteLater()
-            if not self._sinks:
-                self.finished.emit()
+    def pause(self) -> None:
+        self._player.pause()
 
     def stop(self) -> None:
-        """停止所有正在播放的声音。"""
-        for sink in list(self._sinks):
-            sink.stop()
-            sink.deleteLater()
-        self._sinks.clear()
+        self._player.stop()
+
+    def set_volume(self, volume: float) -> None:
+        """volume: 0.0 ~ 1.0。"""
+        self._audio_output.setVolume(max(0.0, min(1.0, volume)))
 
     def is_playing(self) -> bool:
-        """是否有声音正在播放。"""
-        return any(
-            sink.state() == QAudio.State.ActiveState for sink in self._sinks
-        )
+        return self._player.playbackState() == QMediaPlayer.PlayingState
