@@ -1,12 +1,13 @@
 """WavePack Maker 主窗口。"""
 
 import shutil
+import sys
 import wave
 from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -759,18 +760,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setAlignment(Qt.AlignCenter)
 
-        # Logo 占位框
-        logo_frame = QFrame()
-        logo_frame.setFixedSize(120, 120)
-        logo_frame.setStyleSheet(
-            "QFrame { border: 2px dashed #888888; border-radius: 12px; background-color: #3a3a3a; }"
-        )
-        logo_label = QLabel("LOGO")
+        # Logo
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base_path = Path(sys._MEIPASS)
+        else:
+            base_path = Path(__file__).resolve().parent.parent.parent
+
+        logo_label = QLabel()
+        logo_label.setFixedSize(120, 120)
         logo_label.setAlignment(Qt.AlignCenter)
-        logo_label.setStyleSheet("color: #888888; font-size: 14px;")
-        logo_layout = QVBoxLayout(logo_frame)
-        logo_layout.addWidget(logo_label)
-        layout.addWidget(logo_frame, alignment=Qt.AlignCenter)
+        logo_label.setStyleSheet(
+            "QLabel { border: 2px dashed #888888; border-radius: 12px; background-color: #3a3a3a; color: #888888; font-size: 14px; }"
+        )
+        logo_path = base_path / "assets" / "logo.png"
+        if logo_path.is_file():
+            pixmap = QPixmap(str(logo_path)).scaled(
+                112, 112, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            logo_label.setPixmap(pixmap)
+        else:
+            logo_label.setText("LOGO")
+        layout.addWidget(logo_label, alignment=Qt.AlignCenter)
 
         # 标题
         title = QLabel("WavePack Maker")

@@ -4,6 +4,7 @@
     python main.py
 """
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -14,7 +15,24 @@ from wavepack_maker.widgets.main_window import MainWindow
 from wavepack_maker.widgets.theme import ThemeManager
 
 
+def _refresh_version() -> None:
+    """开发运行时自动调用 scripts/gen_version.py 刷新版本与编译时间。"""
+    if getattr(sys, "frozen", False):
+        return
+    script = Path(__file__).resolve().parent / "scripts" / "gen_version.py"
+    if script.is_file():
+        try:
+            subprocess.run(
+                [sys.executable, str(script)],
+                check=False,
+                capture_output=True,
+            )
+        except Exception:
+            pass
+
+
 def main() -> int:
+    _refresh_version()
     app = QApplication(sys.argv)
     app.setApplicationName("WavePack Maker")
     app.setApplicationDisplayName("WavePack Maker")
