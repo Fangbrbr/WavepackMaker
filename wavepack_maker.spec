@@ -7,13 +7,17 @@ from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
 
 project_root = Path(SPECPATH).resolve()
 icon_path = project_root / "assets" / "logo.ico"
+logo_path = project_root / "assets" / "logo.png"
 version_file = project_root / "build" / "version_info.txt"
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[(str(icon_path), 'assets')],
+    datas=[
+        (str(icon_path), 'assets'),
+        (str(logo_path), 'assets'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

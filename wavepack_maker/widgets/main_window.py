@@ -769,9 +769,6 @@ class MainWindow(QMainWindow):
         logo_label = QLabel()
         logo_label.setFixedSize(120, 120)
         logo_label.setAlignment(Qt.AlignCenter)
-        logo_label.setStyleSheet(
-            "QLabel { border: 2px dashed #888888; border-radius: 12px; background-color: #3a3a3a; color: #888888; font-size: 14px; }"
-        )
         logo_path = base_path / "assets" / "logo.png"
         if logo_path.is_file():
             pixmap = QPixmap(str(logo_path)).scaled(
