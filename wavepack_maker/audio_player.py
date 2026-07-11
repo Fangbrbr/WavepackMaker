@@ -44,7 +44,8 @@ class AudioPlayer(QObject):
         fmt.setChannelCount(1)
         fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
 
-        device = QMediaDevices.defaultOutputDevice()
+        media_devices = QMediaDevices(self)
+        device = media_devices.defaultAudioOutput()
         sink = QAudioSink(device, fmt, self)
         sink.stateChanged.connect(
             lambda state, s=sink: self._on_state_changed(state, s)
