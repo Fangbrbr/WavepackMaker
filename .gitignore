@@ -11,6 +11,9 @@ __pycache__/
 build/
 dist/
 
+# reference
+ESP32Synth/
+
 # IDE
 .vscode/
 .idea/

@@ -70,7 +70,7 @@ class MainWindow(QMainWindow):
         self._setup_toolbar()
         self._setup_central()
         self._setup_statusbar()
-        self._new_project()
+        self._new_project(show_properties=False)
         self._setup_midi()
 
     def _setup_menu(self) -> None:
@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("文件(&F)")
         self._new_action = QAction("新建工程(&N)", self)
         self._new_action.setShortcut(QKeySequence.StandardKey.New)
-        self._new_action.triggered.connect(self._new_project)
+        self._new_action.triggered.connect(lambda: self._new_project(show_properties=True))
         file_menu.addAction(self._new_action)
 
         self._open_action = QAction("打开工程(&O)...", self)
@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
             self.style().standardIcon(QStyle.SP_FileIcon), "新建工程", self
         )
         new_btn.setShortcut(QKeySequence.StandardKey.New)
-        new_btn.triggered.connect(self._new_project)
+        new_btn.triggered.connect(lambda: self._new_project(show_properties=True))
         toolbar.addAction(new_btn)
 
         # 左侧：打开工程
@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # 工程生命周期
     # ------------------------------------------------------------------
-    def _new_project(self) -> None:
+    def _new_project(self, show_properties: bool = False) -> None:
         if self._ignore_dirty_once:
             self._ignore_dirty_once = False
         elif not self._maybe_save_dirty():
@@ -272,6 +272,10 @@ class MainWindow(QMainWindow):
         self._bind_project()
         self._update_title()
         self._update_status()
+
+        if show_properties:
+            # 主窗口显示后再延迟弹出新建工程属性对话框，避免界面未加载先弹窗
+            QTimer.singleShot(300, lambda: self._edit_properties(title="新建工程"))
 
     def _open_project(self) -> None:
         if not self._maybe_save_dirty():
