@@ -11,15 +11,22 @@ from pathlib import Path
 
 
 def get_git_version() -> str:
-    """优先取当前提交对应的 tag；没有 tag 则返回短 commit hash。"""
+    """取当前代码对应的 git 版本描述。
+
+    优先使用 `git describe --tags --always --dirty`：
+    - 若当前提交正好对应 tag，则返回 tag 名（如 `v1.0.0`）。
+    - 否则返回距离最近 tag 的描述（如 `v1.0.0-15-g93cf777`）。
+    - 若工作区存在未提交修改，追加 `-dirty`。
+    当 describe 不可用时回退到短 commit hash。
+    """
     try:
-        tag = subprocess.check_output(
-            ["git", "describe", "--tags", "--exact-match"],
+        version = subprocess.check_output(
+            ["git", "describe", "--tags", "--always", "--dirty"],
             text=True,
             stderr=subprocess.DEVNULL,
         ).strip()
-        if tag:
-            return tag
+        if version:
+            return version
     except subprocess.CalledProcessError:
         pass
 
